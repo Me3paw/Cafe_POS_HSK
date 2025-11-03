@@ -1,0 +1,105 @@
+package graphicUI;
+
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.ActionEvent;
+
+/**
+ * MainFrame is the main application window. It has a left sidebar menu and a CardLayout content area.
+ */
+public class MainFrame extends JFrame {
+    private JPanel menuPanel;
+    private JPanel contentPanel;
+    private CardLayout contentLayout;
+
+    // Card names
+    public static final String SYSTEM = "SYSTEM";
+    public static final String CATALOG = "CATALOG";
+    public static final String UPDATE = "UPDATE";
+    public static final String SEARCH = "SEARCH";
+    public static final String OPERATION = "OPERATION";
+    public static final String REPORT = "REPORT";
+
+    private SystemPanel systemPanel;
+    private CatalogPanel catalogPanel;
+    private UpdatePanel updatePanel;
+    private SearchPanel searchPanel;
+    private OperationPanel operationPanel;
+    private ReportPanel reportPanel;
+
+    public MainFrame() {
+        super("Café POS - Phiên bản mẫu");
+        initComponents();
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setSize(1000, 700);
+        setLocationRelativeTo(null);
+    }
+
+    private void initComponents() {
+        menuPanel = new JPanel();
+        menuPanel.setLayout(new BoxLayout(menuPanel, BoxLayout.Y_AXIS));
+        menuPanel.setPreferredSize(new Dimension(220, 0));
+        menuPanel.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+
+        addMenuButton("1. Hệ thống", SYSTEM);
+        addMenuButton("2. Danh mục", CATALOG);
+        addMenuButton("3. Cập nhật", UPDATE);
+        addMenuButton("4. Tìm kiếm", SEARCH);
+        addMenuButton("5. Xử lý", OPERATION);
+        addMenuButton("6. Báo biểu", REPORT);
+
+        contentLayout = new CardLayout();
+        contentPanel = new JPanel(contentLayout);
+
+        systemPanel = new SystemPanel();
+        catalogPanel = new CatalogPanel();
+        updatePanel = new UpdatePanel();
+        searchPanel = new SearchPanel(this);
+        operationPanel = new OperationPanel(this);
+        reportPanel = new ReportPanel();
+
+        contentPanel.add(systemPanel, SYSTEM);
+        contentPanel.add(catalogPanel, CATALOG);
+        contentPanel.add(updatePanel, UPDATE);
+        contentPanel.add(searchPanel, SEARCH);
+        contentPanel.add(operationPanel, OPERATION);
+        contentPanel.add(reportPanel, REPORT);
+
+        getContentPane().setLayout(new BorderLayout());
+        getContentPane().add(menuPanel, BorderLayout.WEST);
+        getContentPane().add(contentPanel, BorderLayout.CENTER);
+
+        // Default view: Update -> Đơn hàng mới
+        showCard(UPDATE);
+        updatePanel.showDefault();
+    }
+
+    private void addMenuButton(String title, String card) {
+        JButton btn = new JButton(title);
+        btn.setAlignmentX(Component.CENTER_ALIGNMENT);
+        btn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 48));
+        btn.addActionListener((ActionEvent e) -> {
+            showCard(card);
+            if (UPDATE.equals(card)) {
+                updatePanel.showDefault();
+            }
+        });
+        menuPanel.add(Box.createVerticalStrut(6));
+        menuPanel.add(btn);
+    }
+
+    private void showCard(String card) {
+        contentLayout.show(contentPanel, card);
+    }
+
+    public static void main(String[] args) {
+        // Use system look and feel (still pure Swing)
+        try {
+            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+        } catch (Exception ignored) {}
+        SwingUtilities.invokeLater(() -> {
+            MainFrame f = new MainFrame();
+            f.setVisible(true);
+        });
+    }
+}
