@@ -5,6 +5,8 @@ import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 
+import components.TableLayoutPanel;
+
 /**
  * UpdatePanel contains subpages: Order (default), Table status, Price/Stock updates.
  */
@@ -56,13 +58,8 @@ public class UpdatePanel extends JPanel {
     static class TableStatusPanel extends JPanel {
         public TableStatusPanel() {
             setLayout(new BorderLayout());
-            String[] cols = {"Bàn", "Trạng thái"};
-            Object[][] rows = { {"B1","Trống"}, {"B2","Đang phục vụ"}, {"B3","Đặt trước"} };
-            JTable t = new JTable(rows, cols);
-            add(new JScrollPane(t), BorderLayout.CENTER);
-            JPanel p = new JPanel();
-            p.add(new JButton("Cập nhật trạng thái"));
-            add(p, BorderLayout.SOUTH);
+            // Only show the TableLayoutPanel as the full content
+            add(new TableLayoutPanel(), BorderLayout.CENTER);
         }
     }
 
