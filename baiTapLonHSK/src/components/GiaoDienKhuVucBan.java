@@ -699,54 +699,57 @@ public class GiaoDienKhuVucBan extends JPanel {
     // can use the same table names/positions without sharing the same objects.
     public static List<CafeTable> copyDefaultLayout() {
         List<CafeTable> def = new ArrayList<>();
-        // Layout constants
-        int startX = 20;
-        int startY = 20;
-        int gapX = 20;
-        int gapY = 20;
 
-        // TOP ROW: 4 rectangular tables (T1..T4)
-        int topW = 100;
-        int topH = 60;
-        for (int i = 0; i < 4; i++) {
+        int startX = 30;      // minor adjustments for nicer visual centering
+        int startY = 30;
+        int gapX = 25;
+        int gapY = 50;
+
+        // === TOP ROW: 5 rectangular tables ===
+        int rectW = 90;
+        int rectH = 60;
+
+        for (int i = 0; i < 5; i++) {
             int num = 1 + i;
-            int x = startX + i * (topW + gapX);
+            int x = startX + i * (rectW + gapX);
             int y = startY;
-            CafeTable t = new CafeTable(num, "T" + num + " | P8", x, y, topW, false);
-            def.add(t);
+            def.add(new CafeTable(num, "T" + num + " | P8", x, y, rectW, false));
         }
 
-        // MIDDLE ROW: 5 circular tables (T5..T9)
-        int midSize = 70;
-        int midY = startY + topH + gapY;
-        // center the middle row under the top row area
-        int midStartX = startX; // aligned with left
+        // === MIDDLE: 4 circular tables ===
+        int circSize = 80;
+        int midY = startY + rectH + gapY;
+
+        // fine-tuned offsets to mimic the picture layout (slightly curved)
+        int[] middleXOffsets = {
+                startX + 40,
+                startX + 40 + circSize + 20,
+                startX + 40 + circSize * 2 + 40,
+                startX + 40 + circSize * 3 + 60
+        };
+
+        for (int i = 0; i < 4; i++) {
+            int num = 6 + i;
+            int x = middleXOffsets[i];
+            int y = midY + (i == 1 ? 10 : i == 2 ? -5 : 0); // small vertical curve
+            def.add(new CafeTable(num, "T" + num + " | P8", x, y, circSize, true));
+        }
+
+        // === BOTTOM ROW: 5 rectangular tables ===
+        int botY = midY + circSize + gapY;
+
         for (int i = 0; i < 5; i++) {
-            int num = 5 + i;
-            int x = midStartX + i * (midSize + gapX);
-            int y = midY;
-            CafeTable t = new CafeTable(num, "T" + num + " | P8", x, y, midSize, true);
-            def.add(t);
+            int num = 11 + i;
+            int x = startX + i * (rectW + gapX);
+            def.add(new CafeTable(num, "T" + num + " | P8", x, botY, rectW, false));
         }
 
-        // BOTTOM ROW: 5 rectangular tables (T10..T14)
-        int botW = 100;
-        int botH = 60;
-        int botY = midY + midSize + gapY;
-        for (int i = 0; i < 5; i++) {
-            int num = 10 + i;
-            int x = startX + i * (botW + gapX);
-            int y = botY;
-            CafeTable t = new CafeTable(num, "T" + num + " | P8", x, y, botW, false);
-            def.add(t);
-        }
-
-        // TAKEAWAY: large rectangle on the right
-        int twW = 140;
-        int twH = topH + midSize + botH + gapY * 2;
-        int twX = startX + 5 * (topW + gapX) + 10; // place to the right of columns
+        // === TAKEAWAY RECTANGLE on the far right ===
+        int twW = 110;
+        int twH = rectH;
+        int twX = startX + 5 * (rectW + gapX) + 20;
         int twY = startY;
-        // takeaway uses maBan = 0 (non-number) so it will be ignored by the initialization sequence
+
         CafeTable takeaway = new CafeTable(0, "TW", twX, twY, twW, false);
         takeaway.isTakeaway = true;
         takeaway.status = "Takeaway";
@@ -754,4 +757,5 @@ public class GiaoDienKhuVucBan extends JPanel {
 
         return def;
     }
+
 }
