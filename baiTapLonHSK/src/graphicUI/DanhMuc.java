@@ -15,6 +15,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.math.BigDecimal;
 import java.sql.Connection;
+import java.sql.Timestamp;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -332,21 +333,58 @@ public class DanhMuc extends JPanel {
 
             btnSave.addActionListener((ActionEvent e) -> {
                 String maTonS = txtMaTon.getText().trim();
-                if (maTonS.isEmpty()) { JOptionPane.showMessageDialog(this, "Chọn 1 bản ghi để lưu."); return; }
+                if (maTonS.isEmpty()) { 
+                    JOptionPane.showMessageDialog(this, "Chọn 1 bản ghi để lưu."); 
+                    return; 
+                }
+
                 int maTon;
-                try { maTon = Integer.parseInt(maTonS); } catch (NumberFormatException ex) { JOptionPane.showMessageDialog(this, "Mã tồn không hợp lệ."); return; }
-                TonKho t = tonKhoDAO.layTheoMaMon(Integer.parseInt(String.valueOf(model.getValueAt(table.getSelectedRow(),1))));
-                if (t == null) { JOptionPane.showMessageDialog(this, "Bản ghi tồn kho không còn tồn tại."); loadData(); return; }
-                // parse and set fields
+                try { 
+                    maTon = Integer.parseInt(maTonS); 
+                } catch (NumberFormatException ex) { 
+                    JOptionPane.showMessageDialog(this, "Mã tồn không hợp lệ."); 
+                    return; 
+                }
+
+                // Lấy bản ghi tồn kho theo mã món (đang chọn trong bảng)
+                TonKho t = tonKhoDAO.layTheoMaMon(
+                    Integer.parseInt(String.valueOf(model.getValueAt(table.getSelectedRow(),1)))
+                );
+
+                if (t == null) { 
+                    JOptionPane.showMessageDialog(this, "Bản ghi tồn kho không còn tồn tại."); 
+                    loadData(); 
+                    return; 
+                }
+
+                // Parse and update fields
                 t.setDonVi(txtDonVi.getText().trim());
-                try { t.setSoLuong(new BigDecimal(txtSoLuong.getText().trim())); } catch (Exception ex) { JOptionPane.showMessageDialog(this, "Số lượng không hợp lệ."); return; }
-                try { t.setGiaNhap(new BigDecimal(txtGiaNhap.getText().trim())); } catch (Exception ex) { JOptionPane.showMessageDialog(this, "Giá nhập không hợp lệ."); return; }
+
+                try { 
+                    t.setSoLuong(new BigDecimal(txtSoLuong.getText().trim())); 
+                } catch (Exception ex) { 
+                    JOptionPane.showMessageDialog(this, "Số lượng không hợp lệ."); 
+                    return; 
+                }
+
+                try { 
+                    t.setGiaNhap(new BigDecimal(txtGiaNhap.getText().trim())); 
+                } catch (Exception ex) { 
+                    JOptionPane.showMessageDialog(this, "Giá nhập không hợp lệ."); 
+                    return; 
+                }
+
+                Timestamp now = new Timestamp(System.currentTimeMillis());
+                t.setCapNhatCuoi(now);
+                txtCapNhat.setText(now.toString());
 
                 boolean ok = tonKhoDAO.capNhat(t);
+
                 if (ok) { 
                     JOptionPane.showMessageDialog(this, "Lưu thành công."); 
                     loadData();
-                    // Refresh the Product CRUD panel to show updated conBan status
+
+                    // Refresh Product panel too
                     if (productCRUDPanel != null) {
                         productCRUDPanel.refreshData();
                     }
@@ -354,6 +392,7 @@ public class DanhMuc extends JPanel {
                     JOptionPane.showMessageDialog(this, "Lưu thất bại."); 
                 }
             });
+
 
             loadData();
         }

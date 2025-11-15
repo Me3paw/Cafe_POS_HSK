@@ -50,28 +50,35 @@ public class TonKhoDAO {
     }
 
     public boolean capNhat(TonKho t) {
-        // Use a transaction: update tonKho, and if soLuong <= 0 set the corresponding mon.conBan = false
-        String sql = "UPDATE tonKho SET donVi = ?, soLuong = ?, giaNhap = ?, mucCanhBao = ? WHERE maTon = ?";
+        // Now includes capNhatCuoi
+        String sql = "UPDATE tonKho SET donVi = ?, soLuong = ?, giaNhap = ?, mucCanhBao = ?, capNhatCuoi = ? WHERE maTon = ?";
         String updateMonSql = "UPDATE mon SET conBan = ? WHERE maMon = ?";
+
         Connection c = null;
         PreparedStatement ps = null;
+
         try {
             c = DBConnection.getConnection();
             c.setAutoCommit(false);
-            
-            // Calculate mucCanhBao based on soLuong
+
+            // Recalculate mức cảnh báo
             BigDecimal mucCanhBao = calculateMucCanhBao(t.getSoLuong());
-            
+
             ps = c.prepareStatement(sql);
             ps.setString(1, t.getDonVi());
-            if (t.getSoLuong() != null) ps.setBigDecimal(2, t.getSoLuong()); else ps.setBigDecimal(2, BigDecimal.ZERO);
-            if (t.getGiaNhap() != null) ps.setBigDecimal(3, t.getGiaNhap()); else ps.setBigDecimal(3, BigDecimal.ZERO);
+            ps.setBigDecimal(2, t.getSoLuong() != null ? t.getSoLuong() : BigDecimal.ZERO);
+            ps.setBigDecimal(3, t.getGiaNhap() != null ? t.getGiaNhap() : BigDecimal.ZERO);
             ps.setBigDecimal(4, mucCanhBao);
-            ps.setInt(5, t.getMaTon());
+
+            // PATCH: write timestamp to DB
+            ps.setTimestamp(5, t.getCapNhatCuoi());
+
+            ps.setInt(6, t.getMaTon());
+
             int rows = ps.executeUpdate();
 
             if (rows > 0) {
-                // If quantity is zero or less, make product not sellable
+                // If quantity <= 0, disable product
                 if (t.getSoLuong() == null || t.getSoLuong().compareTo(BigDecimal.ZERO) <= 0) {
                     try (PreparedStatement ps2 = c.prepareStatement(updateMonSql)) {
                         ps2.setBoolean(1, false);
@@ -79,23 +86,28 @@ public class TonKhoDAO {
                         ps2.executeUpdate();
                     }
                 }
+
                 c.commit();
                 return true;
+
             } else {
                 c.rollback();
                 return false;
             }
+
         } catch (SQLException ex) {
             ex.printStackTrace();
             if (c != null) {
                 try { c.rollback(); } catch (SQLException ignored) {}
             }
             return false;
+
         } finally {
             if (ps != null) try { ps.close(); } catch (SQLException ignored) {}
             if (c != null) try { c.setAutoCommit(true); c.close(); } catch (SQLException ignored) {}
         }
     }
+
 
     private BigDecimal calculateMucCanhBao(BigDecimal soLuong) {
         // mucCanhBao = 0 if soLuong > 100
