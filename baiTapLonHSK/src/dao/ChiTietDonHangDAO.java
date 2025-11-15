@@ -2,6 +2,7 @@ package dao;
 
 import connectDB.DBConnection;
 import entity.ChiTietDonHang;
+import entity.Mon;
 
 import java.sql.*;
 import java.util.ArrayList;
@@ -13,7 +14,7 @@ public class ChiTietDonHangDAO {
         String sql = "SELECT maChiTiet, maDonHang, maMon, soLuong, giaBan, thanhTien, maThue, tienThue FROM chiTietDonHang";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
-                res.add(themHang(rs));
+                res.add(mapRow(rs));
             }
         } catch (SQLException ex) {
             ex.printStackTrace();
@@ -27,7 +28,7 @@ public class ChiTietDonHangDAO {
             ps.setInt(1, maChiTiet);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    return themHang(rs);
+                    return mapRow(rs);
                 }
             }
         } catch (SQLException ex) {
@@ -89,7 +90,43 @@ public class ChiTietDonHangDAO {
         }
     }
 
-    private ChiTietDonHang themHang(ResultSet rs) throws SQLException {
+    public List<ChiTietDonHang> layTheoDonHang(int maDonHang) {
+        List<ChiTietDonHang> res = new ArrayList<>();
+        String sql = "SELECT ct.maChiTiet, ct.maDonHang, ct.maMon, ct.soLuong, ct.giaBan, ct.thanhTien, ct.maThue, ct.tienThue, " +
+                "m.tenMon AS monTen, m.giaBan AS monGia, m.moTa AS monMoTa, m.conBan AS monConBan " +
+                "FROM chiTietDonHang ct " +
+                "LEFT JOIN mon m ON ct.maMon = m.maMon " +
+                "WHERE ct.maDonHang = ?";
+        try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setInt(1, maDonHang);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    ChiTietDonHang ct = mapRow(rs);
+
+                    int maMon = rs.getInt("maMon");
+                    if (!rs.wasNull()) {
+                        Mon mon = ct.getMon();
+                        if (mon == null) {
+                            mon = new Mon();
+                            ct.setMon(mon);
+                        }
+                        mon.setMaMon(maMon);
+                        mon.setTenMon(rs.getString("monTen"));
+                        mon.setGiaBan(rs.getBigDecimal("monGia"));
+                        mon.setMoTa(rs.getString("monMoTa"));
+                        mon.setConBan(rs.getBoolean("monConBan"));
+                    }
+
+                    res.add(ct);
+                }
+            }
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+        }
+        return res;
+    }
+
+    private ChiTietDonHang mapRow(ResultSet rs) throws SQLException {
         ChiTietDonHang ct = new ChiTietDonHang();
         ct.setMaChiTiet(rs.getInt("maChiTiet"));
         ct.setMaDonHang(rs.getInt("maDonHang"));

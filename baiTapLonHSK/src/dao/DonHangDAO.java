@@ -36,6 +36,38 @@ public class DonHangDAO {
         return null;
     }
 
+    public List<DonHang> layTheoLoaiDon(String loaiDon) {
+        List<DonHang> res = new ArrayList<>();
+        String sql = "SELECT maDonHang, maNguoiDung, maCa, maKhachHang, maGiamGia, tongTien, tienGiam, tienThue, tongCuoi, trangThai, loaiDon, thoiGianTao, maBan FROM donHang WHERE UPPER(loaiDon) = UPPER(?) ORDER BY thoiGianTao DESC";
+        try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, loaiDon);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    res.add(themHang(rs));
+                }
+            }
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+        }
+        return res;
+    }
+
+    public List<DonHang> layTheoBan(int maBan) {
+        List<DonHang> res = new ArrayList<>();
+        String sql = "SELECT maDonHang, maNguoiDung, maCa, maKhachHang, maGiamGia, tongTien, tienGiam, tienThue, tongCuoi, trangThai, loaiDon, thoiGianTao, maBan FROM donHang WHERE maBan = ? ORDER BY thoiGianTao DESC";
+        try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setInt(1, maBan);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    res.add(themHang(rs));
+                }
+            }
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+        }
+        return res;
+    }
+
     public boolean them(DonHang d) {
         String sql = "INSERT INTO donHang(maNguoiDung, maCa, maKhachHang, maGiamGia, tongTien, tienGiam, tienThue, tongCuoi, trangThai, loaiDon, maBan) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {

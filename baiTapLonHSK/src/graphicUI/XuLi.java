@@ -5,14 +5,25 @@ import javax.swing.table.DefaultTableModel;
 
 import components.GiaoDienKhuVucBan;
 import components.GiaoDienKhuVucBan.CafeTable;
+import dao.ChiTietDonHangDAO;
+import dao.DonHangDAO;
+import dao.KhachHangDAO;
+import entity.ChiTietDonHang;
+import entity.DonHang;
+import entity.KhachHang;
 
 import java.awt.*;
 import java.io.File;
 import java.io.PrintWriter;
+import java.math.BigDecimal;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
+import java.text.Normalizer;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * OperationPanel groups payment, printing, refunds, transfer/cancel operations.
@@ -75,10 +86,26 @@ public class XuLi extends JPanel {
         private final JRadioButton cashRadio = new JRadioButton("Tiền mặt");
         private final JRadioButton bankRadio = new JRadioButton("Chuyển khoản");
 
+        private final DonHangDAO donHangDAO = new DonHangDAO();
+        private final ChiTietDonHangDAO chiTietDonHangDAO = new ChiTietDonHangDAO();
+        private final KhachHangDAO khachHangDAO = new KhachHangDAO();
+        private final List<DonHang> currentOrders = new ArrayList<>();
+        private volatile Integer pendingCustomerId = null;
+        private final DecimalFormat currencyFormat;
+
         public PaymentPanel(GiaoDienKhuVucBan.TableModel sharedModel) {
             setLayout(new BorderLayout(12, 12));
             setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
             setBackground(new Color(250, 250, 255));
+            customerIdField.setEditable(false);
+            discountField.setEditable(false);
+            taxField.setEditable(false);
+            totalField.setEditable(false);
+
+            DecimalFormatSymbols symbols = new DecimalFormatSymbols(new Locale("vi", "VN"));
+            symbols.setDecimalSeparator(',');
+            symbols.setGroupingSeparator('.');
+            currencyFormat = new DecimalFormat("#,##0.##", symbols);
 
             // ===== LEFT: orders list (top) and table layout (bottom) =====
             ordersModel = new DefaultTableModel(new String[]{"Mã HĐ", "Bàn", "Trạng thái"}, 0);
@@ -87,8 +114,8 @@ public class XuLi extends JPanel {
             ordersScroll.setBorder(BorderFactory.createTitledBorder("Danh sách hóa đơn (Chọn để load)"));
             ordersTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 
-            // populate sample orders
-            loadSampleOrders();
+            JButton refreshOrdersBtn = new JButton("Tải lại");
+            refreshOrdersBtn.addActionListener(e -> reloadOrdersFromDatabase());
 
             // Table layout panel in checkout mode (click should NOT change occupancy)
             // Use the shared model so this panel and others reflect the same table objects
@@ -96,15 +123,17 @@ public class XuLi extends JPanel {
              // Give the table layout a larger preferred size so it's fully visible
              tableLayout.setPreferredSize(new Dimension(520, 320));
              tableLayout.setMinimumSize(new Dimension(480, 280));
-             tableLayout.addTableSelectionListener(t -> loadOrderFromTable(t));
 
-            // When selecting an order from the list, load its placeholder products
+            // When selecting an order from the list, load its products from DB
             ordersTable.getSelectionModel().addListSelectionListener(e -> {
                 if (!e.getValueIsAdjusting()) {
                     int r = ordersTable.getSelectedRow();
                     if (r >= 0) {
-                        String code = ordersModel.getValueAt(r, 0).toString();
-                        loadSampleProductsForOrder(code);
+                        int modelRow = ordersTable.convertRowIndexToModel(r);
+                        if (modelRow >= 0 && modelRow < currentOrders.size()) {
+                            DonHang order = currentOrders.get(modelRow);
+                            displayOrder(order);
+                        }
                     }
                 }
             });
@@ -114,7 +143,10 @@ public class XuLi extends JPanel {
             ordersScroll.setMinimumSize(new Dimension(480, 120));
 
             JPanel leftPanel = new JPanel(new BorderLayout(8,8));
-            leftPanel.add(ordersScroll, BorderLayout.NORTH);
+            JPanel ordersBlock = new JPanel(new BorderLayout(4,4));
+            ordersBlock.add(ordersScroll, BorderLayout.CENTER);
+            ordersBlock.add(refreshOrdersBtn, BorderLayout.SOUTH);
+            leftPanel.add(ordersBlock, BorderLayout.NORTH);
             // ensure the table layout has room to paint fully
             leftPanel.add(tableLayout, BorderLayout.CENTER);
             // Give the left panel more horizontal space by default
@@ -196,74 +228,236 @@ public class XuLi extends JPanel {
             add(split, BorderLayout.CENTER);
 
             // ===== Events =====
-            // Clicking a table should load a placeholder order into product list
-            tableLayout.addTableSelectionListener(t -> loadSampleProductsFromTable(t));
+            tableLayout.addTableSelectionListener(this::loadOrderFromTable);
 
             payBtn.addActionListener(e -> processPayment());
+
+            reloadOrdersFromDatabase();
         }
 
         // expose tableLayout so other panels can use the shared list
         public GiaoDienKhuVucBan getTableLayout() { return tableLayout; }
 
-        private void loadSampleOrders() {
-            // Use table names that match the default layout in TableLayoutPanel (T1..T11)
-            ordersModel.addRow(new Object[]{"HD001", "T1", "Đang phục vụ"});
-            ordersModel.addRow(new Object[]{"HD002", "T2", "Đã thanh toán"});
-            ordersModel.addRow(new Object[]{"HD003", "T3", "Chưa in"});
-            ordersModel.addRow(new Object[]{"HD004", "T4", "Đang phục vụ"});
-            ordersModel.addRow(new Object[]{"HD005", "T5", "Đang phục vụ"});
-            ordersModel.addRow(new Object[]{"HD006", "T6", "Đã thanh toán"});
-            ordersModel.addRow(new Object[]{"HD007", "T7", "Chưa in"});
-            ordersModel.addRow(new Object[]{"HD008", "T8", "Đang phục vụ"});
-            ordersModel.addRow(new Object[]{"HD009", "T9", "Đã thanh toán"});
-            ordersModel.addRow(new Object[]{"HD010", "T10", "Chưa in"});
-            ordersModel.addRow(new Object[]{"HD011", "T11", "Đang phục vụ"});
+        private void reloadOrdersFromDatabase() {
+            ordersModel.setRowCount(0);
+            currentOrders.clear();
+            new SwingWorker<List<DonHang>, Void>() {
+                @Override
+                protected List<DonHang> doInBackground() {
+                    return donHangDAO.layHet();
+                }
+
+                @Override
+                protected void done() {
+                    try {
+                        List<DonHang> list = get();
+                        if (list != null) {
+                            for (DonHang d : list) {
+                                currentOrders.add(d);
+                                ordersModel.addRow(new Object[]{d.getMaDonHang(), formatTableName(d), d.getTrangThai()});
+                            }
+                        }
+                        if (!currentOrders.isEmpty()) {
+                            ordersTable.setRowSelectionInterval(0, 0);
+                            displayOrder(currentOrders.get(0));
+                        } else {
+                            clearOrderDisplay();
+                        }
+                    } catch (Exception ex) {
+                        ex.printStackTrace();
+                        JOptionPane.showMessageDialog(PaymentPanel.this, "Không tải được danh sách hóa đơn từ CSDL.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                    }
+                }
+            }.execute();
         }
 
-        // When user clicks a table in layout
-        private void loadSampleProductsFromTable(CafeTable t) {
-            // placeholder: create a temporary order using table name
-            String orderId = "TMP-" + t.name;
-            loadSampleProductsForOrder(orderId);
-            // mark the selection in orders table if present
-            for (int i=0;i<ordersModel.getRowCount();i++){
-                if (ordersModel.getValueAt(i,1).toString().equalsIgnoreCase(t.name)){
-                    ordersTable.setRowSelectionInterval(i,i);
-                    ordersTable.scrollRectToVisible(ordersTable.getCellRect(i,0,true));
-                    return;
-                }
+        private String formatTableName(DonHang order) {
+            if (order == null) return "";
+            if (order.getMaBan() != null) {
+                return "Bàn " + order.getMaBan();
             }
+            if (order.getLoaiDon() != null) {
+                return order.getLoaiDon();
+            }
+            return "-";
+        }
+
+        private void displayOrder(DonHang order) {
+            if (order == null) {
+                clearOrderDisplay();
+                return;
+            }
+            customerIdField.setText(order.getMaKhachHang() != null ? order.getMaKhachHang().toString() : "");
+            discountField.setText(formatCurrency(order.getTienGiam()));
+            taxField.setText(formatCurrency(order.getTienThue()));
+            totalField.setText(formatCurrency(order.getTongCuoi()));
+            fillCustomerInfo(order.getMaKhachHang());
+            loadOrderDetailsFromDatabase(order.getMaDonHang());
+        }
+
+        private void clearOrderDisplay() {
+            productModel.setRowCount(0);
+            pendingCustomerId = null;
+            customerIdField.setText("");
+            customerNameField.setText("");
+            customerPhoneField.setText("");
+            discountField.setText("");
+            taxField.setText("");
+            totalField.setText("");
+        }
+
+        private void fillCustomerInfo(Integer maKhachHang) {
+            if (maKhachHang == null) {
+                pendingCustomerId = null;
+                customerNameField.setText("Khách lẻ");
+                customerPhoneField.setText("");
+                return;
+            }
+
+            pendingCustomerId = maKhachHang;
+            final Integer expected = maKhachHang;
+            new SwingWorker<KhachHang, Void>() {
+                @Override
+                protected KhachHang doInBackground() {
+                    return khachHangDAO.layTheoId(maKhachHang);
+                }
+
+                @Override
+                protected void done() {
+                    try {
+                        if (pendingCustomerId != expected) {
+                            return;
+                        }
+                        KhachHang kh = get();
+                        if (kh != null) {
+                            customerNameField.setText(kh.getHoTen());
+                            customerPhoneField.setText(kh.getSoDienThoai());
+                        } else {
+                            customerNameField.setText("Khách lẻ");
+                            customerPhoneField.setText("");
+                        }
+                    } catch (Exception ex) {
+                        customerNameField.setText("Khách lẻ");
+                        customerPhoneField.setText("");
+                    }
+                }
+            }.execute();
+        }
+
+        private void loadOrderDetailsFromDatabase(int maDonHang) {
+            productModel.setRowCount(0);
+            new SwingWorker<List<ChiTietDonHang>, Void>() {
+                @Override
+                protected List<ChiTietDonHang> doInBackground() {
+                    return chiTietDonHangDAO.layTheoDonHang(maDonHang);
+                }
+
+                @Override
+                protected void done() {
+                    try {
+                        List<ChiTietDonHang> details = get();
+                        if (details != null) {
+                            for (ChiTietDonHang ct : details) {
+                                String tenMon = ct.getMon() != null && ct.getMon().getTenMon() != null
+                                        ? ct.getMon().getTenMon()
+                                        : ("Món " + ct.getMaMon());
+                                productModel.addRow(new Object[]{ct.getMaMon(), tenMon, ct.getSoLuong(), ct.getGiaBan(), ct.getThanhTien()});
+                            }
+                        }
+                        updateTotalFromProducts();
+                    } catch (Exception ex) {
+                        ex.printStackTrace();
+                        JOptionPane.showMessageDialog(PaymentPanel.this, "Không tải được chi tiết hóa đơn.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                    }
+                }
+            }.execute();
         }
 
         private void loadOrderFromTable(CafeTable t) {
-            // just delegate to sample loader
-            loadSampleProductsFromTable(t);
+            if (t == null) return;
+            if (t.maBan <= 0) {
+                JOptionPane.showMessageDialog(this, "Bàn này không liên kết với hóa đơn tại chỗ.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+
+            new SwingWorker<DonHang, Void>() {
+                @Override
+                protected DonHang doInBackground() {
+                    List<DonHang> list = donHangDAO.layTheoBan(t.maBan);
+                    if (list == null || list.isEmpty()) return null;
+                    for (DonHang dh : list) {
+                        if (!isPaid(dh)) return dh;
+                    }
+                    return list.get(0);
+                }
+
+                @Override
+                protected void done() {
+                    try {
+                        DonHang dh = get();
+                        if (dh != null) {
+                            selectOrderInTable(dh.getMaDonHang());
+                            displayOrder(dh);
+                        } else {
+                            JOptionPane.showMessageDialog(PaymentPanel.this, "Chưa có hóa đơn nào gắn với bàn " + t.name + ".", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+                        }
+                    } catch (Exception ex) {
+                        ex.printStackTrace();
+                        JOptionPane.showMessageDialog(PaymentPanel.this, "Lỗi khi tải hóa đơn của bàn.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                    }
+                }
+            }.execute();
         }
 
-        private void loadSampleProductsForOrder(String orderId) {
-            // clear
-            productModel.setRowCount(0);
-            // placeholder products depending on orderId
-            if (orderId.contains("HD001") || orderId.contains("TMP-T1")) {
-                productModel.addRow(new Object[]{"SP001", "Cà phê sữa", 2, 25000, 50000});
-                productModel.addRow(new Object[]{"SP002", "Bánh ngọt", 1, 70000, 70000});
-            } else if (orderId.contains("HD002") || orderId.contains("TMP-T2")) {
-                productModel.addRow(new Object[]{"SP003", "Trà đào", 1, 45000, 45000});
-                productModel.addRow(new Object[]{"SP004", "Bánh mì bơ tỏi", 2, 20000, 40000});
-            } else {
-                productModel.addRow(new Object[]{"SP005", "Cà phê đen", 1, 25000, 25000});
-                productModel.addRow(new Object[]{"SP006", "Nước suối", 1, 20000, 20000});
+        private void selectOrderInTable(int maDonHang) {
+            for (int i = 0; i < currentOrders.size(); i++) {
+                DonHang d = currentOrders.get(i);
+                if (d != null && d.getMaDonHang() == maDonHang) {
+                    final int row = i;
+                    SwingUtilities.invokeLater(() -> {
+                        ordersTable.setRowSelectionInterval(row, row);
+                        ordersTable.scrollRectToVisible(ordersTable.getCellRect(row, 0, true));
+                    });
+                    return;
+                }
             }
-            updateTotalFromProducts();
+            reloadOrdersFromDatabase();
+        }
+
+        private boolean isPaid(DonHang order) {
+            if (order == null || order.getTrangThai() == null) return false;
+            String status = order.getTrangThai().replaceAll("\\s+", "");
+            String normalized = Normalizer.normalize(status, Normalizer.Form.NFD)
+                    .replaceAll("\\p{InCombiningDiacriticalMarks}+", "")
+                    .toUpperCase(Locale.ROOT);
+            return normalized.contains("PAID") || normalized.contains("THANHTOAN") || normalized.contains("HOANTAT");
         }
 
         private void updateTotalFromProducts() {
-            double sum = 0;
+            BigDecimal sum = BigDecimal.ZERO;
             for (int i = 0; i < productModel.getRowCount(); i++) {
                 Object v = productModel.getValueAt(i, 4);
-                if (v != null) try { sum += Double.parseDouble(v.toString().replace(",","")); } catch (Exception ex) { }
+                if (v instanceof BigDecimal) {
+                    sum = sum.add((BigDecimal) v);
+                } else if (v instanceof Number) {
+                    sum = sum.add(BigDecimal.valueOf(((Number) v).doubleValue()));
+                } else if (v != null) {
+                    try {
+                        String normalized = v.toString().replaceAll("[^0-9.-]", "");
+                        if (!normalized.isEmpty()) {
+                            sum = sum.add(new BigDecimal(normalized));
+                        }
+                    } catch (Exception ignored) {}
+                }
             }
-            totalField.setText(String.format("%,.0f", sum));
+            if (sum.compareTo(BigDecimal.ZERO) > 0) {
+                totalField.setText(formatCurrency(sum));
+            }
+        }
+
+        private String formatCurrency(BigDecimal value) {
+            if (value == null) return "";
+            return currencyFormat.format(value) + " đ";
         }
 
         private void processPayment() {
@@ -301,15 +495,9 @@ public class XuLi extends JPanel {
             }
 
             // clear after payment
-            productModel.setRowCount(0);
-            totalField.setText("");
+            clearOrderDisplay();
             cashField.setText("");
             changeLabel.setText("Tiền thối lại: 0 đ");
-            customerIdField.setText("");
-            customerNameField.setText("");
-            customerPhoneField.setText("");
-            discountField.setText("");
-            taxField.setText("");
         }
     }
     static class PrintPanel extends JPanel {
