@@ -64,7 +64,7 @@ public class SystemPanel extends JPanel {
         String current = new String(currentField.getPassword());
         String n = new String(newField.getPassword());
         String c = new String(confirmField.getPassword());
-        if (!AppConfig.getSystemPassword().equals(current)) {
+        if (!CaiDat.getSystemPassword().equals(current)) {
             JOptionPane.showMessageDialog(this, "Mật khẩu hiện tại không đúng.", "Lỗi", JOptionPane.ERROR_MESSAGE);
             return;
         }
@@ -76,7 +76,7 @@ public class SystemPanel extends JPanel {
             JOptionPane.showMessageDialog(this, "Xác nhận mật khẩu không khớp.", "Lỗi", JOptionPane.ERROR_MESSAGE);
             return;
         }
-        AppConfig.setSystemPassword(n);
+        CaiDat.setSystemPassword(n);
         JOptionPane.showMessageDialog(this, "Thay đổi mật khẩu thành công.", "Thành công", JOptionPane.INFORMATION_MESSAGE);
         currentField.setText("");
         newField.setText("");

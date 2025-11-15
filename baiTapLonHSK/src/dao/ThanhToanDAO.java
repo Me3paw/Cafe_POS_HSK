@@ -8,12 +8,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ThanhToanDAO {
-    public List<ThanhToan> getAll() {
+    public List<ThanhToan> layHet() {
         List<ThanhToan> res = new ArrayList<>();
         String sql = "SELECT maThanhToan, maDonHang, hinhThuc, soTien, thoiGian FROM thanhToan";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
-                res.add(mapRow(rs));
+                res.add(dienHang(rs));
             }
         } catch (SQLException ex) {
             ex.printStackTrace();
@@ -21,13 +21,13 @@ public class ThanhToanDAO {
         return res;
     }
 
-    public ThanhToan getById(int maThanhToan) {
+    public ThanhToan layTheoId(int maThanhToan) {
         String sql = "SELECT maThanhToan, maDonHang, hinhThuc, soTien, thoiGian FROM thanhToan WHERE maThanhToan = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, maThanhToan);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    return mapRow(rs);
+                    return dienHang(rs);
                 }
             }
         } catch (SQLException ex) {
@@ -36,7 +36,7 @@ public class ThanhToanDAO {
         return null;
     }
 
-    public boolean insert(ThanhToan t) {
+    public boolean them(ThanhToan t) {
         String sql = "INSERT INTO thanhToan(maDonHang, hinhThuc, soTien, thoiGian) VALUES(?, ?, ?, ?)";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setInt(1, t.getMaDonHang());
@@ -59,7 +59,7 @@ public class ThanhToanDAO {
         }
     }
 
-    public boolean update(ThanhToan t) {
+    public boolean capNhat(ThanhToan t) {
         String sql = "UPDATE thanhToan SET maDonHang = ?, hinhThuc = ?, soTien = ?, thoiGian = ? WHERE maThanhToan = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, t.getMaDonHang());
@@ -74,7 +74,7 @@ public class ThanhToanDAO {
         }
     }
 
-    public boolean delete(int maThanhToan) {
+    public boolean xoa(int maThanhToan) {
         String sql = "DELETE FROM thanhToan WHERE maThanhToan = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, maThanhToan);
@@ -85,7 +85,7 @@ public class ThanhToanDAO {
         }
     }
 
-    private ThanhToan mapRow(ResultSet rs) throws SQLException {
+    private ThanhToan dienHang(ResultSet rs) throws SQLException {
         ThanhToan t = new ThanhToan();
         t.setMaThanhToan(rs.getInt("maThanhToan"));
         t.setMaDonHang(rs.getInt("maDonHang"));

@@ -8,12 +8,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ChiTietDonHangDAO {
-    public List<ChiTietDonHang> getAll() {
+    public List<ChiTietDonHang> layHet() {
         List<ChiTietDonHang> res = new ArrayList<>();
         String sql = "SELECT maChiTiet, maDonHang, maMon, soLuong, giaBan, thanhTien, maThue, tienThue FROM chiTietDonHang";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
-                res.add(mapRow(rs));
+                res.add(themHang(rs));
             }
         } catch (SQLException ex) {
             ex.printStackTrace();
@@ -21,13 +21,13 @@ public class ChiTietDonHangDAO {
         return res;
     }
 
-    public ChiTietDonHang getById(int maChiTiet) {
+    public ChiTietDonHang layTheoId(int maChiTiet) {
         String sql = "SELECT maChiTiet, maDonHang, maMon, soLuong, giaBan, thanhTien, maThue, tienThue FROM chiTietDonHang WHERE maChiTiet = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, maChiTiet);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    return mapRow(rs);
+                    return themHang(rs);
                 }
             }
         } catch (SQLException ex) {
@@ -36,7 +36,7 @@ public class ChiTietDonHangDAO {
         return null;
     }
 
-    public boolean insert(ChiTietDonHang ct) {
+    public boolean them(ChiTietDonHang ct) {
         String sql = "INSERT INTO chiTietDonHang(maDonHang, maMon, soLuong, giaBan, thanhTien, maThue, tienThue) VALUES(?, ?, ?, ?, ?, ?, ?)";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setInt(1, ct.getMaDonHang());
@@ -60,7 +60,7 @@ public class ChiTietDonHangDAO {
         }
     }
 
-    public boolean update(ChiTietDonHang ct) {
+    public boolean capNhat(ChiTietDonHang ct) {
         String sql = "UPDATE chiTietDonHang SET maDonHang = ?, maMon = ?, soLuong = ?, giaBan = ?, thanhTien = ?, maThue = ?, tienThue = ? WHERE maChiTiet = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, ct.getMaDonHang());
@@ -78,7 +78,7 @@ public class ChiTietDonHangDAO {
         }
     }
 
-    public boolean delete(int maChiTiet) {
+    public boolean xoa(int maChiTiet) {
         String sql = "DELETE FROM chiTietDonHang WHERE maChiTiet = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, maChiTiet);
@@ -89,7 +89,7 @@ public class ChiTietDonHangDAO {
         }
     }
 
-    private ChiTietDonHang mapRow(ResultSet rs) throws SQLException {
+    private ChiTietDonHang themHang(ResultSet rs) throws SQLException {
         ChiTietDonHang ct = new ChiTietDonHang();
         ct.setMaChiTiet(rs.getInt("maChiTiet"));
         ct.setMaDonHang(rs.getInt("maDonHang"));

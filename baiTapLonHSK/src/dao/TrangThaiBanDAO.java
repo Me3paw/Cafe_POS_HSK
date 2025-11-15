@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class TrangThaiBanDAO {
-    public List<TrangThaiBan> getAll() {
+    public List<TrangThaiBan> layHet() {
         List<TrangThaiBan> res = new ArrayList<>();
         String sql = "SELECT maBan, maDonHang, trangThai, soNguoi, capNhatCuoi FROM trangThaiBan";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
@@ -21,7 +21,7 @@ public class TrangThaiBanDAO {
         return res;
     }
 
-    public TrangThaiBan getById(int maBan) {
+    public TrangThaiBan layTheoId(int maBan) {
         String sql = "SELECT maBan, maDonHang, trangThai, soNguoi, capNhatCuoi FROM trangThaiBan WHERE maBan = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, maBan);
@@ -36,7 +36,7 @@ public class TrangThaiBanDAO {
         return null;
     }
 
-    public boolean insert(TrangThaiBan t) {
+    public boolean them(TrangThaiBan t) {
         String sql = "INSERT INTO trangThaiBan(maBan, maDonHang, trangThai, soNguoi, capNhatCuoi) VALUES(?, ?, ?, ?, ?)";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, t.getMaBan());
@@ -52,7 +52,7 @@ public class TrangThaiBanDAO {
         }
     }
 
-    public boolean update(TrangThaiBan t) {
+    public boolean capNhat(TrangThaiBan t) {
         String sql = "UPDATE trangThaiBan SET maDonHang = ?, trangThai = ?, soNguoi = ?, capNhatCuoi = ? WHERE maBan = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             setNullableInt(ps, 1, t.getMaDonHang());
@@ -72,7 +72,7 @@ public class TrangThaiBanDAO {
      * Behavior: if the table already contains rows, do nothing. If empty, insert one row per CafeTable
      * using the integer maBan of the CafeTable. maDonHang = NULL, trangThai = 'TRONG', soNguoi = NULL, capNhatCuoi = NOW().
      */
-    public void initFromCafeTables(List<components.TableLayoutPanel.CafeTable> tables) {
+    public void khoiTao(List<components.GiaoDienKhuVucBan.CafeTable> tables) {
         if (tables == null || tables.isEmpty()) return;
         String countSql = "SELECT COUNT(*) FROM trangThaiBan";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(countSql); ResultSet rs = ps.executeQuery()) {
@@ -86,9 +86,9 @@ public class TrangThaiBanDAO {
         }
 
         // Table is empty: insert rows for integer maBan values (>0)
-        String insertSql = "INSERT INTO trangThaiBan(maBan, maDonHang, trangThai, soNguoi, capNhatCuoi) VALUES(?, NULL, 'trong', NULL, NOW())";
+        String insertSql = "INSERT INTO trangThaiBan(maBan, maDonHang, trangThai, soNguoi, capNhatCuoi) VALUES(?, NULL, 'Trống', NULL, NOW())";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(insertSql)) {
-            for (components.TableLayoutPanel.CafeTable t : tables) {
+            for (components.GiaoDienKhuVucBan.CafeTable t : tables) {
                 if (t == null) continue;
                 // only use positive integer ids; skip takeaway (maBan==0)
                 if (t.maBan <= 0) continue;

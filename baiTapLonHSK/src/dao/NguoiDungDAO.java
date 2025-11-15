@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class NguoiDungDAO {
-    public List<NguoiDung> getAll() {
+    public List<NguoiDung> layHet() {
         List<NguoiDung> res = new ArrayList<>();
         String sql = "SELECT maNguoiDung, tenDangNhap, hoTen, vaiTro, matKhau, ngayTao FROM nguoiDung";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
@@ -26,7 +26,7 @@ public class NguoiDungDAO {
         return res;
     }
 
-    public NguoiDung getById(int maNguoiDung) {
+    public NguoiDung layTheoId(int maNguoiDung) {
         String sql = "SELECT maNguoiDung, tenDangNhap, hoTen, vaiTro, matKhau, ngayTao FROM nguoiDung WHERE maNguoiDung = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, maNguoiDung);
@@ -46,7 +46,7 @@ public class NguoiDungDAO {
         return null;
     }
 
-    public boolean insert(NguoiDung n) {
+    public boolean them(NguoiDung n) {
         String sql = "INSERT INTO nguoiDung(tenDangNhap, hoTen, vaiTro, matKhau) VALUES(?, ?, ?, ?)";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, n.getTenDangNhap());
@@ -66,7 +66,7 @@ public class NguoiDungDAO {
         } catch (SQLException ex) { ex.printStackTrace(); return false; }
     }
 
-    public boolean update(NguoiDung n) {
+    public boolean capNhat(NguoiDung n) {
         String sql = "UPDATE nguoiDung SET tenDangNhap = ?, hoTen = ?, vaiTro = ?, matKhau = ? WHERE maNguoiDung = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, n.getTenDangNhap());
@@ -78,7 +78,7 @@ public class NguoiDungDAO {
         } catch (SQLException ex) { ex.printStackTrace(); return false; }
     }
 
-    public boolean delete(int maNguoiDung) {
+    public boolean xoa(int maNguoiDung) {
         String sql = "DELETE FROM nguoiDung WHERE maNguoiDung = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, maNguoiDung);

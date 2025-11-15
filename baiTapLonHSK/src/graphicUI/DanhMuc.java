@@ -8,10 +8,10 @@ import java.awt.event.ActionEvent;
 /**
  * CatalogPanel manages product and combo CRUD forms.
  */
-public class CatalogPanel extends JPanel {
+public class DanhMuc extends JPanel {
     private JTabbedPane tabs;
 
-    public CatalogPanel() {
+    public DanhMuc() {
         setLayout(new BorderLayout());
         tabs = new JTabbedPane();
         tabs.addTab("Sản phẩm", new ProductCRUDPanel());

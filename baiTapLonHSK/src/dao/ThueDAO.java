@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ThueDAO {
-    public List<Thue> getAll() {
+    public List<Thue> layHet() {
         List<Thue> res = new ArrayList<>();
         String sql = "SELECT maThue, tenThue, tyLe, dangApDung FROM thue";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
@@ -24,7 +24,7 @@ public class ThueDAO {
         return res;
     }
 
-    public Thue getById(int maThue) {
+    public Thue layTheoId(int maThue) {
         String sql = "SELECT maThue, tenThue, tyLe, dangApDung FROM thue WHERE maThue = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, maThue);
@@ -42,7 +42,7 @@ public class ThueDAO {
         return null;
     }
 
-    public boolean insert(Thue t) {
+    public boolean them(Thue t) {
         String sql = "INSERT INTO thue(tenThue, tyLe, dangApDung) VALUES(?, ?, ?)";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, t.getTenThue());
@@ -61,7 +61,7 @@ public class ThueDAO {
         } catch (SQLException ex) { ex.printStackTrace(); return false; }
     }
 
-    public boolean update(Thue t) {
+    public boolean capNhat(Thue t) {
         String sql = "UPDATE thue SET tenThue = ?, tyLe = ?, dangApDung = ? WHERE maThue = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, t.getTenThue());
@@ -72,7 +72,7 @@ public class ThueDAO {
         } catch (SQLException ex) { ex.printStackTrace(); return false; }
     }
 
-    public boolean delete(int maThue) {
+    public boolean xoa(int maThue) {
         String sql = "DELETE FROM thue WHERE maThue = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, maThue);

@@ -4,7 +4,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 
-import components.TableLayoutPanel;
+import components.GiaoDienKhuVucBan;
 import dao.TrangThaiBanDAO;
 import entity.TrangThaiBan;
 import java.util.List;
@@ -12,7 +12,7 @@ import java.util.List;
 /**
  * MainFrame is the main application window. It has a left sidebar menu and a CardLayout content area.
  */
-public class MainFrame extends JFrame {
+public class ManHinhChinh extends JFrame {
     private JPanel menuPanel;
     private JPanel contentPanel;
     private CardLayout contentLayout;
@@ -26,16 +26,16 @@ public class MainFrame extends JFrame {
     public static final String REPORT = "REPORT";
 
     private SystemPanel systemPanel;
-    private CatalogPanel catalogPanel;
-    private UpdatePanel updatePanel;
-    private SearchPanel searchPanel;
-    private OperationPanel operationPanel;
-    private ReportPanel reportPanel;
+    private DanhMuc catalogPanel;
+    private CapNhat updatePanel;
+    private TimKiem searchPanel;
+    private XuLi operationPanel;
+    private BaoBieu reportPanel;
 
     // single shared TableModel instance
-    private final TableLayoutPanel.TableModel sharedTableModel = new TableLayoutPanel.TableModel(TableLayoutPanel.copyDefaultLayout());
+    private final GiaoDienKhuVucBan.TableModel sharedTableModel = new GiaoDienKhuVucBan.TableModel(GiaoDienKhuVucBan.copyDefaultLayout());
 
-    public MainFrame() {
+    public ManHinhChinh() {
         super("Café POS - Phiên bản mẫu");
         initComponents();
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -60,12 +60,12 @@ public class MainFrame extends JFrame {
         contentPanel = new JPanel(contentLayout);
 
         systemPanel = new SystemPanel();
-        catalogPanel = new CatalogPanel();
+        catalogPanel = new DanhMuc();
         // initialize panels with shared model
-        updatePanel = new UpdatePanel(sharedTableModel);
-        searchPanel = new SearchPanel(this);
-        operationPanel = new OperationPanel(this, sharedTableModel);
-        reportPanel = new ReportPanel();
+        updatePanel = new CapNhat(sharedTableModel);
+        searchPanel = new TimKiem(this);
+        operationPanel = new XuLi(this, sharedTableModel);
+        reportPanel = new BaoBieu();
 
         contentPanel.add(systemPanel, SYSTEM);
         contentPanel.add(catalogPanel, CATALOG);
@@ -90,8 +90,8 @@ public class MainFrame extends JFrame {
         try {
             TrangThaiBanDAO dao = new TrangThaiBanDAO();
             // Ensure DB has rows for our default layout when empty
-            dao.initFromCafeTables(sharedTableModel.getTables());
-            List<TrangThaiBan> list = dao.getAll();
+            dao.khoiTao(sharedTableModel.getTables());
+            List<TrangThaiBan> list = dao.layHet();
             if (list != null) {
                 // mergeStatuses expects integer maBan values in the DB rows
                 sharedTableModel.mergeStatuses(list);
@@ -126,7 +126,7 @@ public class MainFrame extends JFrame {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
         } catch (Exception ignored) {}
         SwingUtilities.invokeLater(() -> {
-            MainFrame f = new MainFrame();
+            ManHinhChinh f = new ManHinhChinh();
             f.setVisible(true);
         });
     }

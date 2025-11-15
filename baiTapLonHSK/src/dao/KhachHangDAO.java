@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class KhachHangDAO {
-    public List<KhachHang> getAll() {
+    public List<KhachHang> layHet() {
         List<KhachHang> res = new ArrayList<>();
         String sql = "SELECT maKhachHang, hoTen, soDienThoai, hangThanhVien, ngayTao FROM khachHang";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
@@ -25,7 +25,7 @@ public class KhachHangDAO {
         return res;
     }
 
-    public KhachHang getById(int maKhachHang) {
+    public KhachHang layTheoId(int maKhachHang) {
         String sql = "SELECT maKhachHang, hoTen, soDienThoai, hangThanhVien, ngayTao FROM khachHang WHERE maKhachHang = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, maKhachHang);
@@ -44,7 +44,7 @@ public class KhachHangDAO {
         return null;
     }
 
-    public boolean insert(KhachHang k) {
+    public boolean them(KhachHang k) {
         String sql = "INSERT INTO khachHang(hoTen, soDienThoai, hangThanhVien) VALUES(?, ?, ?)";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, k.getHoTen());
@@ -63,7 +63,7 @@ public class KhachHangDAO {
         } catch (SQLException ex) { ex.printStackTrace(); return false; }
     }
 
-    public boolean update(KhachHang k) {
+    public boolean capNhat(KhachHang k) {
         String sql = "UPDATE khachHang SET hoTen = ?, soDienThoai = ?, hangThanhVien = ? WHERE maKhachHang = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, k.getHoTen());
@@ -74,7 +74,7 @@ public class KhachHangDAO {
         } catch (SQLException ex) { ex.printStackTrace(); return false; }
     }
 
-    public boolean delete(int maKhachHang) {
+    public boolean xoa(int maKhachHang) {
         String sql = "DELETE FROM khachHang WHERE maKhachHang = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, maKhachHang);

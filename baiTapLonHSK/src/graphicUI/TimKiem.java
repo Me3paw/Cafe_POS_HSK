@@ -8,11 +8,11 @@ import java.awt.*;
  * SearchPanel provides tabs for invoice, customer, and employee search.
  * Employee search requires system password to access.
  */
-public class SearchPanel extends JPanel {
+public class TimKiem extends JPanel {
     private JTabbedPane tabs;
     private Component owner;
 
-    public SearchPanel(Component owner) {
+    public TimKiem(Component owner) {
         this.owner = owner;
         setLayout(new BorderLayout());
         tabs = new JTabbedPane();

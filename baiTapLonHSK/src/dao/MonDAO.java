@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class MonDAO {
-    public List<Mon> getAll() {
+    public List<Mon> layHet() {
         List<Mon> res = new ArrayList<>();
         String sql = "SELECT maMon, maDanhMuc, tenMon, giaBan, conBan, moTa FROM mon";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
@@ -27,7 +27,7 @@ public class MonDAO {
         return res;
     }
 
-    public Mon getById(int maMon) {
+    public Mon layTheoId(int maMon) {
         String sql = "SELECT maMon, maDanhMuc, tenMon, giaBan, conBan, moTa FROM mon WHERE maMon = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, maMon);
@@ -48,7 +48,7 @@ public class MonDAO {
         return null;
     }
 
-    public boolean insert(Mon m) {
+    public boolean them(Mon m) {
         String sql = "INSERT INTO mon(maDanhMuc, tenMon, giaBan, conBan, moTa) VALUES(?, ?, ?, ?, ?)";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             if (m.getMaDanhMuc() != null) {
@@ -73,7 +73,7 @@ public class MonDAO {
         } catch (SQLException ex) { ex.printStackTrace(); return false; }
     }
 
-    public boolean update(Mon m) {
+    public boolean capNhat(Mon m) {
         String sql = "UPDATE mon SET maDanhMuc = ?, tenMon = ?, giaBan = ?, conBan = ?, moTa = ? WHERE maMon = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             if (m.getMaDanhMuc() != null) {
@@ -90,7 +90,7 @@ public class MonDAO {
         } catch (SQLException ex) { ex.printStackTrace(); return false; }
     }
 
-    public boolean delete(int maMon) {
+    public boolean xoa(int maMon) {
         String sql = "DELETE FROM mon WHERE maMon = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, maMon);

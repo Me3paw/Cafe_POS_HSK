@@ -6,17 +6,17 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import components.TableLayoutPanel;
+import components.GiaoDienKhuVucBan;
 
 /**
  * UpdatePanel contains subpages: Order (default), Table status, Price/Stock updates.
  */
-public class UpdatePanel extends JPanel {
+public class CapNhat extends JPanel {
     private JTabbedPane tabs;
     private OrderPanel orderPanel;
-    private final TableLayoutPanel.TableModel tableModel;
+    private final GiaoDienKhuVucBan.TableModel tableModel;
 
-    public UpdatePanel(TableLayoutPanel.TableModel tableModel) {
+    public CapNhat(GiaoDienKhuVucBan.TableModel tableModel) {
         this.tableModel = tableModel;
         setLayout(new BorderLayout());
         tabs = new JTabbedPane();
@@ -55,7 +55,7 @@ public class UpdatePanel extends JPanel {
             // When creating a new order, open a modal dialog that lets user pick a table
             add.addActionListener((ActionEvent e) -> {
                 // Create a chooser TableLayoutPanel using the shared model from the outer UpdatePanel
-                TableLayoutPanel chooser = new TableLayoutPanel(TableLayoutPanel.Mode.ORDER_MODE, ((UpdatePanel)SwingUtilities.getAncestorOfClass(UpdatePanel.class, this)).tableModel);
+                GiaoDienKhuVucBan chooser = new GiaoDienKhuVucBan(GiaoDienKhuVucBan.Mode.DATBAN_MODE, ((CapNhat)SwingUtilities.getAncestorOfClass(CapNhat.class, this)).tableModel);
                 // Disable auto-occupy in the chooser; we'll occupy after confirmation
                 chooser.setAutoOccupyOnOrder(false);
 
@@ -135,7 +135,7 @@ public class UpdatePanel extends JPanel {
         }
 
         // Opens a simple non-modal order editor where user can add items and update total
-        private void openOrderEditorWindow(String orderId, TableLayoutPanel.CafeTable table, int orderRowIndex) {
+        private void openOrderEditorWindow(String orderId, GiaoDienKhuVucBan.CafeTable table, int orderRowIndex) {
             Window parent = SwingUtilities.getWindowAncestor(this);
             JDialog win = new JDialog(parent, "Đơn hàng - " + orderId, Dialog.ModalityType.MODELESS);
             win.getContentPane().setLayout(new BorderLayout(8,8));
@@ -216,7 +216,7 @@ public class UpdatePanel extends JPanel {
         public TableStatusPanel() {
             setLayout(new BorderLayout());
             // Only show the TableLayoutPanel as the full content using the shared model
-            add(new TableLayoutPanel(TableLayoutPanel.Mode.STATUS_MODE, UpdatePanel.this.tableModel), BorderLayout.CENTER);
+            add(new GiaoDienKhuVucBan(GiaoDienKhuVucBan.Mode.TRANGTHAI_MODE, CapNhat.this.tableModel), BorderLayout.CENTER);
         }
     }
 

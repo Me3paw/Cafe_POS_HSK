@@ -8,31 +8,31 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class GiamGiaDAO {
-    public List<GiamGia> getAll() {
+    public List<GiamGia> layHet() {
         List<GiamGia> res = new ArrayList<>();
         String sql = "SELECT maGiamGia, tenChuongTrinh, loai, giaTri, hangApDung, ngayBatDau, ngayKetThuc, dangApDung FROM giamGia";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
-                res.add(mapRow(rs));
+                res.add(themHang(rs));
             }
         } catch (SQLException ex) { ex.printStackTrace(); }
         return res;
     }
 
-    public GiamGia getById(int maGiamGia) {
+    public GiamGia layTheoId(int maGiamGia) {
         String sql = "SELECT maGiamGia, tenChuongTrinh, loai, giaTri, hangApDung, ngayBatDau, ngayKetThuc, dangApDung FROM giamGia WHERE maGiamGia = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, maGiamGia);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    return mapRow(rs);
+                    return themHang(rs);
                 }
             }
         } catch (SQLException ex) { ex.printStackTrace(); }
         return null;
     }
 
-    public boolean insert(GiamGia g) {
+    public boolean them(GiamGia g) {
         String sql = "INSERT INTO giamGia(tenChuongTrinh, loai, giaTri, hangApDung, ngayBatDau, ngayKetThuc, dangApDung) VALUES(?, ?, ?, ?, ?, ?, ?)";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, g.getTenChuongTrinh());
@@ -63,7 +63,7 @@ public class GiamGiaDAO {
         } catch (SQLException ex) { ex.printStackTrace(); return false; }
     }
 
-    public boolean update(GiamGia g) {
+    public boolean capNhat(GiamGia g) {
         String sql = "UPDATE giamGia SET tenChuongTrinh = ?, loai = ?, giaTri = ?, hangApDung = ?, ngayBatDau = ?, ngayKetThuc = ?, dangApDung = ? WHERE maGiamGia = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, g.getTenChuongTrinh());
@@ -86,7 +86,7 @@ public class GiamGiaDAO {
         } catch (SQLException ex) { ex.printStackTrace(); return false; }
     }
 
-    public boolean delete(int maGiamGia) {
+    public boolean xoa(int maGiamGia) {
         String sql = "DELETE FROM giamGia WHERE maGiamGia = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, maGiamGia);
@@ -94,7 +94,7 @@ public class GiamGiaDAO {
         } catch (SQLException ex) { ex.printStackTrace(); return false; }
     }
 
-    private GiamGia mapRow(ResultSet rs) throws SQLException {
+    private GiamGia themHang(ResultSet rs) throws SQLException {
         GiamGia g = new GiamGia();
         g.setMaGiamGia(rs.getInt("maGiamGia"));
         g.setTenChuongTrinh(rs.getString("tenChuongTrinh"));

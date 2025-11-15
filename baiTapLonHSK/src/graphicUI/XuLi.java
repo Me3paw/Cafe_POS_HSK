@@ -3,8 +3,8 @@ package graphicUI;
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 
-import components.TableLayoutPanel;
-import components.TableLayoutPanel.CafeTable;
+import components.GiaoDienKhuVucBan;
+import components.GiaoDienKhuVucBan.CafeTable;
 
 import java.awt.*;
 import java.io.File;
@@ -18,12 +18,12 @@ import java.util.List;
  * OperationPanel groups payment, printing, refunds, transfer/cancel operations.
  * Refund and some actions require password authentication.
  */
-public class OperationPanel extends JPanel {
+public class XuLi extends JPanel {
     private JTabbedPane tabs;
     private Component owner;
     private PaymentPanel paymentPanel; // hold a reference so other inner panels can access table layout
 
-    public OperationPanel(Component owner, TableLayoutPanel.TableModel tableModel) {
+    public XuLi(Component owner, GiaoDienKhuVucBan.TableModel tableModel) {
         this.owner = owner;
         setLayout(new BorderLayout());
         tabs = new JTabbedPane();
@@ -59,7 +59,7 @@ public class OperationPanel extends JPanel {
         // Left side: list of orders and table layout
         private final DefaultTableModel ordersModel;
         private final JTable ordersTable;
-        private final TableLayoutPanel tableLayout;
+        private final GiaoDienKhuVucBan tableLayout;
 
         // Right side: payment section
         private final DefaultTableModel productModel;
@@ -75,7 +75,7 @@ public class OperationPanel extends JPanel {
         private final JRadioButton cashRadio = new JRadioButton("Tiền mặt");
         private final JRadioButton bankRadio = new JRadioButton("Chuyển khoản");
 
-        public PaymentPanel(TableLayoutPanel.TableModel sharedModel) {
+        public PaymentPanel(GiaoDienKhuVucBan.TableModel sharedModel) {
             setLayout(new BorderLayout(12, 12));
             setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
             setBackground(new Color(250, 250, 255));
@@ -92,7 +92,7 @@ public class OperationPanel extends JPanel {
 
             // Table layout panel in checkout mode (click should NOT change occupancy)
             // Use the shared model so this panel and others reflect the same table objects
-            tableLayout = new TableLayoutPanel(TableLayoutPanel.Mode.CHECKOUT_MODE, sharedModel);
+            tableLayout = new GiaoDienKhuVucBan(GiaoDienKhuVucBan.Mode.THANHTOAN_MODE, sharedModel);
              // Give the table layout a larger preferred size so it's fully visible
              tableLayout.setPreferredSize(new Dimension(520, 320));
              tableLayout.setMinimumSize(new Dimension(480, 280));
@@ -203,7 +203,7 @@ public class OperationPanel extends JPanel {
         }
 
         // expose tableLayout so other panels can use the shared list
-        public TableLayoutPanel getTableLayout() { return tableLayout; }
+        public GiaoDienKhuVucBan getTableLayout() { return tableLayout; }
 
         private void loadSampleOrders() {
             // Use table names that match the default layout in TableLayoutPanel (T1..T11)
@@ -720,16 +720,16 @@ public class OperationPanel extends JPanel {
             String oldTable = orderModel.getValueAt(row, 1).toString();
 
             // Use the real shared tables from the payment panel layout and start a transfer
-            TableLayoutPanel layout = OperationPanel.this.paymentPanel.getTableLayout();
+            GiaoDienKhuVucBan layout = XuLi.this.paymentPanel.getTableLayout();
             boolean started = layout.beginTransferFrom(oldTable);
             if (!started) return;
 
             // Add a temporary listener that will be notified when the transfer completes inside the layout
             final int selRow = row;
             final String selOrderId = orderId;
-            TableLayoutPanel.TableSelectionListener temp = new TableLayoutPanel.TableSelectionListener() {
+            GiaoDienKhuVucBan.TableSelectionListener temp = new GiaoDienKhuVucBan.TableSelectionListener() {
                 @Override
-                public void tableSelected(TableLayoutPanel.CafeTable t) {
+                public void tableSelected(GiaoDienKhuVucBan.CafeTable t) {
                     // Update order model and UI and remove this listener
                     SwingUtilities.invokeLater(() -> {
                         orderModel.setValueAt(t.name, selRow, 1);
@@ -742,22 +742,22 @@ public class OperationPanel extends JPanel {
         }
 
         // helper trying to map strings like "Bàn 1" or "T1" to the CafeTable instances
-        private TableLayoutPanel.CafeTable findMatchingTable(List<TableLayoutPanel.CafeTable> tables, String label) {
+        private GiaoDienKhuVucBan.CafeTable findMatchingTable(List<GiaoDienKhuVucBan.CafeTable> tables, String label) {
             if (label == null) return null;
             // direct match first
-            for (TableLayoutPanel.CafeTable t : tables) {
+            for (GiaoDienKhuVucBan.CafeTable t : tables) {
                 if (t.name != null && t.name.equalsIgnoreCase(label)) return t;
             }
             // try to extract a number from label (e.g. "Bàn 1" -> 1) and match T<number>
             String digits = label.replaceAll("\\D+", "");
             if (!digits.isEmpty()) {
                 String tname = "T" + digits;
-                for (TableLayoutPanel.CafeTable t : tables) {
+                for (GiaoDienKhuVucBan.CafeTable t : tables) {
                     if (t.name != null && t.name.startsWith(tname)) return t;
                 }
             }
             // fallback: match contains
-            for (TableLayoutPanel.CafeTable t : tables) {
+            for (GiaoDienKhuVucBan.CafeTable t : tables) {
                 if (t.name != null && label.contains(t.name)) return t;
             }
             return null;

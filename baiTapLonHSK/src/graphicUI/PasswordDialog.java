@@ -37,7 +37,7 @@ public class PasswordDialog extends JDialog {
             @Override
             public void actionPerformed(ActionEvent e) {
                 String entered = new String(passwordField.getPassword());
-                if (AppConfig.getSystemPassword().equals(entered)) {
+                if (CaiDat.getSystemPassword().equals(entered)) {
                     authenticated = true;
                     dispose();
                 } else {

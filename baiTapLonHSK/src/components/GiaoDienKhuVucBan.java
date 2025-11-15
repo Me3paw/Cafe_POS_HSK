@@ -13,21 +13,11 @@ import entity.TrangThaiBan;
 
 import java.sql.*;
 
-/**
- * TableLayoutPanel - simple restaurant table map with three modes:
- * STATUS_MODE: clicking a table prompts to change status (Occupied/Reserved) or handle occupied actions
- * ORDER_MODE: clicking a table marks it Occupied and notifies listeners (used for creating/changing orders)
- * CHECKOUT_MODE: clicking a table only notifies listeners (used for checkout selection)
- *
- * This class now supports a shared observable TableModel so multiple panels can share the same
- * set of tables and observe status changes in real-time. Construction must be done via the
- * (Mode, TableModel) constructor so all panels share the same model instance.
- */
-public class TableLayoutPanel extends JPanel {
+public class GiaoDienKhuVucBan extends JPanel {
     public enum Mode {
-        STATUS_MODE,
-        ORDER_MODE,
-        CHECKOUT_MODE // new mode for selecting a table for checkout without auto-occupying
+        TRANGTHAI_MODE,
+        DATBAN_MODE,
+        THANHTOAN_MODE // new mode for selecting a table for checkout without auto-occupying
     }
 
     private Mode mode;
@@ -58,7 +48,7 @@ public class TableLayoutPanel extends JPanel {
         // optional order id and last update timestamp from DB
         public String maDonHang;
         public java.sql.Timestamp capNhatCuoi;
-        public String status = "Free"; // Free / Occupied / Reserved / Under maintenance / Takeaway
+        public String status = "Trống"; // Free / Occupied / Reserved / Under maintenance / Takeaway
         public boolean isCircle;
         public boolean isTakeaway = false; // true for the takeaway slot
 
@@ -152,9 +142,9 @@ public class TableLayoutPanel extends JPanel {
                     tt.setTrangThai(newStatus);
                     // include UI-level soNguoi in persistence
                     tt.setSoNguoi(t.getSoNguoi());
-                    boolean ok = dao.update(tt);
+                    boolean ok = dao.capNhat(tt);
                     if (!ok) {
-                        dao.insert(tt);
+                        dao.them(tt);
                     }
                 } catch (Exception ex) {
                     ex.printStackTrace();
@@ -184,8 +174,8 @@ public class TableLayoutPanel extends JPanel {
                     tt.setMaBan(t.maBan);
                     tt.setTrangThai(t.status);
                     tt.setSoNguoi(soNguoi);
-                    boolean ok = dao.update(tt);
-                    if (!ok) dao.insert(tt);
+                    boolean ok = dao.capNhat(tt);
+                    if (!ok) dao.them(tt);
                 } catch (Exception ex) {
                     ex.printStackTrace();
                 }
@@ -283,7 +273,7 @@ public class TableLayoutPanel extends JPanel {
 
     // NOTE: Require injection of a shared TableModel. The constructors that created
     // isolated models have been removed to prevent accidental divergent views.
-    public TableLayoutPanel(Mode mode, TableModel model) {
+    public GiaoDienKhuVucBan(Mode mode, TableModel model) {
         this.mode = mode;
         this.tableModel = model != null ? model : new TableModel(copyDefaultLayout());
 
@@ -315,29 +305,29 @@ public class TableLayoutPanel extends JPanel {
                         if (pendingMoveSource != null) {
                             // destination chosen
                             if (pendingMoveSource == t) {
-                                JOptionPane.showMessageDialog(TableLayoutPanel.this, "Chọn bàn đích khác.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+                                JOptionPane.showMessageDialog(GiaoDienKhuVucBan.this, "Chọn bàn đích khác.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
                                 return;
                             }
-                            if (t.isTakeaway || "Under maintenance".equalsIgnoreCase(t.status)) {
-                                JOptionPane.showMessageDialog(TableLayoutPanel.this, "Không thể chuyển đến bàn này (Takeaway hoặc đang bảo trì).", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                            if (t.isTakeaway || "Bảo trì".equalsIgnoreCase(t.status)) {
+                                JOptionPane.showMessageDialog(GiaoDienKhuVucBan.this, "Không thể chuyển đến bàn này (Takeaway hoặc đang bảo trì).", "Lỗi", JOptionPane.ERROR_MESSAGE);
                                 return;
                             }
-                            int ans = JOptionPane.showConfirmDialog(TableLayoutPanel.this,
+                            int ans = JOptionPane.showConfirmDialog(GiaoDienKhuVucBan.this,
                                     "Xác nhận chuyển đơn từ " + pendingMoveSource.name + " sang " + t.name + "?",
                                     "Xác nhận chuyển bàn",
                                     JOptionPane.YES_NO_OPTION);
                             if (ans == JOptionPane.YES_OPTION) {
-                                tableModel.setStatus(t, "Occupied");
-                                tableModel.setStatus(pendingMoveSource, "Free");
+                                tableModel.setStatus(t, "Đang sử dụng");
+                                tableModel.setStatus(pendingMoveSource, "Trống");
                                 notifySelectionListeners(t);
                                 pendingMoveSource = null;
                                 setCursor(Cursor.getDefaultCursor());
-                                setMode(Mode.STATUS_MODE);
+                                setMode(Mode.TRANGTHAI_MODE);
                                 repaint();
                             } else {
                                 pendingMoveSource = null;
                                 setCursor(Cursor.getDefaultCursor());
-                                setMode(Mode.STATUS_MODE);
+                                setMode(Mode.TRANGTHAI_MODE);
                             }
 
                             // handled this click, stop processing
@@ -345,17 +335,17 @@ public class TableLayoutPanel extends JPanel {
                         }
 
                         // No pending move - behave according to current mode
-                        if (mode == Mode.STATUS_MODE) {
+                        if (mode == Mode.TRANGTHAI_MODE) {
                             // STATUS_MODE is used for modal interactions (including initiating transfers).
                             showStatusChangeDialog(t);
-                        } else if (mode == Mode.ORDER_MODE) {
+                        } else if (mode == Mode.DATBAN_MODE) {
                             // ORDER_MODE behavior: select table for creating/updating order
                             if (autoOccupyOnOrder) {
                                 setTableInUse(t);
                             } else {
                                 notifySelectionListeners(t);
                             }
-                        } else if (mode == Mode.CHECKOUT_MODE) {
+                        } else if (mode == Mode.THANHTOAN_MODE) {
                             // For checkout mode we only notify listeners and do NOT change the table status
                             notifySelectionListeners(t);
                         }
@@ -373,10 +363,10 @@ public class TableLayoutPanel extends JPanel {
                 }
 
                 // If occupied table, offer actions: update order, change table, change status, update people
-                if ("Occupied".equalsIgnoreCase(table.status)) {
+                if ("Đang sử dụng".equalsIgnoreCase(table.status)) {
                     String[] occupiedOptions = new String[]{"Cập nhật đơn", "Cập nhật số người", "Chuyển bàn", "Đổi trạng thái", "Hủy"};
                     int opt = JOptionPane.showOptionDialog(
-                            TableLayoutPanel.this,
+                            GiaoDienKhuVucBan.this,
                             "Bàn " + table.name + " đang được phục vụ. Chọn hành động:",
                             "Bàn đang bận",
                             JOptionPane.DEFAULT_OPTION,
@@ -386,7 +376,7 @@ public class TableLayoutPanel extends JPanel {
                             occupiedOptions[0]);
 
                     if (opt == 0) { // cập nhật đơn
-                        JOptionPane.showMessageDialog(TableLayoutPanel.this, "Mở cập nhật đơn cho " + table.name + " (placeholder)", "Cập nhật đơn", JOptionPane.INFORMATION_MESSAGE);
+                        JOptionPane.showMessageDialog(GiaoDienKhuVucBan.this, "Mở cập nhật đơn cho " + table.name + " (placeholder)", "Cập nhật đơn", JOptionPane.INFORMATION_MESSAGE);
                     } else if (opt == 1) { // cập nhật số người
                         InputResult res = promptForSoNguoiSimple();
                         if (res.cancelled) {
@@ -398,14 +388,14 @@ public class TableLayoutPanel extends JPanel {
                     } else if (opt == 2) { // chuyển bàn
                         // set pending move source; status-mode will handle the destination click
                         pendingMoveSource = table;
-                        setMode(Mode.STATUS_MODE);
+                        setMode(Mode.TRANGTHAI_MODE);
                         // change cursor to indicate selection mode and prompt
                         setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
-                        JOptionPane.showMessageDialog(TableLayoutPanel.this, "Chọn bàn đích để chuyển đơn từ " + table.name + ". (Bấm vào bàn đích)", "Chuyển bàn", JOptionPane.INFORMATION_MESSAGE);
+                        JOptionPane.showMessageDialog(GiaoDienKhuVucBan.this, "Chọn bàn đích để chuyển đơn từ " + table.name + ". (Bấm vào bàn đích)", "Chuyển bàn", JOptionPane.INFORMATION_MESSAGE);
                     } else if (opt == 3) { // đổi trạng thái
-                        String[] statusOptions = new String[]{"Free", "Occupied", "Reserved", "Under maintenance"};
+                        String[] statusOptions = new String[]{"Trống", "Đang sử dụng", "Đặt trước", "Bảo trì"};
                         String choice = (String) JOptionPane.showInputDialog(
-                                TableLayoutPanel.this,
+                                GiaoDienKhuVucBan.this,
                                 "Chọn trạng thái:",
                                 "Bàn: " + table.name,
                                 JOptionPane.QUESTION_MESSAGE,
@@ -415,7 +405,7 @@ public class TableLayoutPanel extends JPanel {
                         );
 
                         if (choice != null) {
-                            if ("Occupied".equalsIgnoreCase(choice)) {
+                            if ("Đang sử dụng".equalsIgnoreCase(choice)) {
                                 // ask for number of people; if cancelled, abort status change
                                 InputResult res = promptForSoNguoiSimple();
                                 if (res.cancelled) {
@@ -434,9 +424,9 @@ public class TableLayoutPanel extends JPanel {
                 }
 
                 // Otherwise allow changing status between Free / Occupied / Reserved / Under maintenance
-                String[] options = {"Free", "Occupied", "Reserved", "Under maintenance"};
+                String[] options = {"Trống", "Đang sử dụng", "Đặt trước", "Bảo trì"};
                 String choice = (String) JOptionPane.showInputDialog(
-                        TableLayoutPanel.this,
+                        GiaoDienKhuVucBan.this,
                         "Chọn trạng thái:",
                         "Bàn: " + table.name,
                         JOptionPane.QUESTION_MESSAGE,
@@ -446,7 +436,7 @@ public class TableLayoutPanel extends JPanel {
                 );
 
                 if (choice != null) {
-                    if ("Occupied".equalsIgnoreCase(choice)) {
+                    if ("Đang sử dụng".equalsIgnoreCase(choice)) {
                         // when user marks Occupied, prompt for number; cancel means abort
                         InputResult res = promptForSoNguoiSimple();
                         if (res.cancelled) {
@@ -464,7 +454,7 @@ public class TableLayoutPanel extends JPanel {
             private InputResult promptForSoNguoiSimple() {
                 // Exact dialog requested by user. Loop until valid or cancelled.
                 while (true) {
-                    String input = JOptionPane.showInputDialog(TableLayoutPanel.this, "Số người? (bỏ trống nếu không rõ)");
+                    String input = JOptionPane.showInputDialog(GiaoDienKhuVucBan.this, "Số người? (bỏ trống nếu không rõ)");
                     if (input == null) {
                         return new InputResult(true, null);
                     }
@@ -475,9 +465,9 @@ public class TableLayoutPanel extends JPanel {
                     try {
                         int v = Integer.parseInt(trimmed);
                         if (v >= 1) return new InputResult(false, v);
-                        else JOptionPane.showMessageDialog(TableLayoutPanel.this, "Số người phải lớn hơn hoặc bằng 1.", "Lỗi nhập", JOptionPane.ERROR_MESSAGE);
+                        else JOptionPane.showMessageDialog(GiaoDienKhuVucBan.this, "Số người phải lớn hơn hoặc bằng 1.", "Lỗi nhập", JOptionPane.ERROR_MESSAGE);
                     } catch (NumberFormatException ex) {
-                        JOptionPane.showMessageDialog(TableLayoutPanel.this, "Vui lòng nhập số nguyên hợp lệ hoặc để trống.", "Lỗi nhập", JOptionPane.ERROR_MESSAGE);
+                        JOptionPane.showMessageDialog(GiaoDienKhuVucBan.this, "Vui lòng nhập số nguyên hợp lệ hoặc để trống.", "Lỗi nhập", JOptionPane.ERROR_MESSAGE);
                     }
                 }
             }
@@ -487,7 +477,7 @@ public class TableLayoutPanel extends JPanel {
                 InputResult res = promptForSoNguoiSimple();
                 if (res.cancelled) return; // user cancelled -> do not occupy
                 table.setSoNguoi(res.value);
-                tableModel.setStatus(table, "Occupied");
+                tableModel.setStatus(table, "Đang sử dụng");
                 System.out.println("Selected table for order: " + table.name);
                 notifySelectionListeners(table);
             }
@@ -516,13 +506,13 @@ public class TableLayoutPanel extends JPanel {
     public boolean beginTransferFrom(String tableLabel) {
         CafeTable src = tableModel.findTableByLabel(tableLabel);
         if (src == null) return false;
-        if (src.isTakeaway || "Under maintenance".equalsIgnoreCase(src.status)) {
+        if (src.isTakeaway || "Bảo trì".equalsIgnoreCase(src.status)) {
             JOptionPane.showMessageDialog(this, "Không thể chuyển từ bàn này.", "Lỗi", JOptionPane.ERROR_MESSAGE);
             return false;
         }
         pendingMoveSource = src;
         // use STATUS_MODE as the unified interaction mode
-        setMode(Mode.STATUS_MODE);
+        setMode(Mode.TRANGTHAI_MODE);
         setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
         JOptionPane.showMessageDialog(this, "Chọn bàn đích để chuyển đơn từ " + src.name + ". (Bấm vào bàn đích)", "Chuyển bàn", JOptionPane.INFORMATION_MESSAGE);
         repaint();
@@ -560,7 +550,7 @@ public class TableLayoutPanel extends JPanel {
     // Programmatically occupy a table (useful when selection requires confirmation outside the panel)
     public void occupyTable(CafeTable table) {
         if (table != null) {
-            tableModel.setStatus(table, "Occupied");
+            tableModel.setStatus(table, "Đang sử dụng");
             notifySelectionListeners(table);
         }
     }
@@ -578,16 +568,16 @@ public class TableLayoutPanel extends JPanel {
             for (CafeTable t : tableModel.getTables()) {
                 Color fill;
                 switch (t.status) {
-                    case "Occupied":
+                    case "Đang sử dụng":
                         fill = Color.RED;
                         break;
-                    case "Reserved":
+                    case "Đặt trước":
                         fill = Color.ORANGE;
                         break;
                     case "Takeaway":
                         fill = new Color(80, 140, 200);
                         break;
-                    case "Under maintenance":
+                    case "Bảo trì":
                         fill = new Color(120, 120, 120);
                         break;
                     default:
@@ -635,7 +625,7 @@ public class TableLayoutPanel extends JPanel {
                 // highlight hovered table if valid
                 if (hoverTable != null && hoverTable != pendingMoveSource) {
                     // invalid destinations: takeaway or under maintenance
-                    boolean invalid = hoverTable.isTakeaway || "Under maintenance".equalsIgnoreCase(hoverTable.status);
+                    boolean invalid = hoverTable.isTakeaway || "Bảo trì".equalsIgnoreCase(hoverTable.status);
                     if (!invalid) {
                         g2.setColor(new Color(40, 180, 60));
                     } else {
@@ -667,7 +657,7 @@ public class TableLayoutPanel extends JPanel {
     public void setMode(Mode mode) {
         this.mode = mode;
         // reset cursor if leaving order mode where a pending move might have set a custom cursor
-        if (mode != Mode.ORDER_MODE) {
+        if (mode != Mode.DATBAN_MODE) {
             setCursor(Cursor.getDefaultCursor());
         }
         // Control buttons removed; nothing else to update here.

@@ -3,7 +3,7 @@ package graphicUI;
 /**
  * AppConfig holds simple application-wide configuration such as the system password.
  */
-public class AppConfig {
+public class CaiDat {
     // Default system password (change via SystemPanel)
     private static String systemPassword = "admin123";
 

@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class DanhMucDAO {
-    public List<DanhMuc> getAll() {
+    public List<DanhMuc> layHet() {
         List<DanhMuc> res = new ArrayList<>();
         String sql = "SELECT maDanhMuc, tenDanhMuc, moTa FROM danhMuc";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
@@ -23,7 +23,7 @@ public class DanhMucDAO {
         return res;
     }
 
-    public DanhMuc getById(int maDanhMuc) {
+    public DanhMuc layTheoId(int maDanhMuc) {
         String sql = "SELECT maDanhMuc, tenDanhMuc, moTa FROM danhMuc WHERE maDanhMuc = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, maDanhMuc);
@@ -40,7 +40,7 @@ public class DanhMucDAO {
         return null;
     }
 
-    public boolean insert(DanhMuc d) {
+    public boolean them(DanhMuc d) {
         String sql = "INSERT INTO danhMuc(tenDanhMuc, moTa) VALUES(?, ?)";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, d.getTenDanhMuc());
@@ -58,7 +58,7 @@ public class DanhMucDAO {
         } catch (SQLException ex) { ex.printStackTrace(); return false; }
     }
 
-    public boolean update(DanhMuc d) {
+    public boolean capNhat(DanhMuc d) {
         String sql = "UPDATE danhMuc SET tenDanhMuc = ?, moTa = ? WHERE maDanhMuc = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, d.getTenDanhMuc());
@@ -68,7 +68,7 @@ public class DanhMucDAO {
         } catch (SQLException ex) { ex.printStackTrace(); return false; }
     }
 
-    public boolean delete(int maDanhMuc) {
+    public boolean xoa(int maDanhMuc) {
         String sql = "DELETE FROM danhMuc WHERE maDanhMuc = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, maDanhMuc);

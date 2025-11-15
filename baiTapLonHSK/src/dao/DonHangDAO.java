@@ -8,12 +8,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class DonHangDAO {
-    public List<DonHang> getAll() {
+    public List<DonHang> layHet() {
         List<DonHang> res = new ArrayList<>();
         String sql = "SELECT maDonHang, maNguoiDung, maCa, maKhachHang, maGiamGia, tongTien, tienGiam, tienThue, tongCuoi, trangThai, loaiDon, thoiGianTao, maBan FROM donHang";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
-                res.add(mapRow(rs));
+                res.add(themHang(rs));
             }
         } catch (SQLException ex) {
             ex.printStackTrace();
@@ -21,13 +21,13 @@ public class DonHangDAO {
         return res;
     }
 
-    public DonHang getById(int maDonHang) {
+    public DonHang layTheoId(int maDonHang) {
         String sql = "SELECT maDonHang, maNguoiDung, maCa, maKhachHang, maGiamGia, tongTien, tienGiam, tienThue, tongCuoi, trangThai, loaiDon, thoiGianTao, maBan FROM donHang WHERE maDonHang = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, maDonHang);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    return mapRow(rs);
+                    return themHang(rs);
                 }
             }
         } catch (SQLException ex) {
@@ -36,7 +36,7 @@ public class DonHangDAO {
         return null;
     }
 
-    public boolean insert(DonHang d) {
+    public boolean them(DonHang d) {
         String sql = "INSERT INTO donHang(maNguoiDung, maCa, maKhachHang, maGiamGia, tongTien, tienGiam, tienThue, tongCuoi, trangThai, loaiDon, maBan) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             setNullableInt(ps, 1, d.getMaNguoiDung());
@@ -66,7 +66,7 @@ public class DonHangDAO {
         }
     }
 
-    public boolean update(DonHang d) {
+    public boolean capNhat(DonHang d) {
         String sql = "UPDATE donHang SET maNguoiDung = ?, maCa = ?, maKhachHang = ?, maGiamGia = ?, tongTien = ?, tienGiam = ?, tienThue = ?, tongCuoi = ?, trangThai = ?, loaiDon = ?, maBan = ? WHERE maDonHang = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             setNullableInt(ps, 1, d.getMaNguoiDung());
@@ -88,7 +88,7 @@ public class DonHangDAO {
         }
     }
 
-    public boolean delete(int maDonHang) {
+    public boolean xoa(int maDonHang) {
         String sql = "DELETE FROM donHang WHERE maDonHang = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, maDonHang);
@@ -99,7 +99,7 @@ public class DonHangDAO {
         }
     }
 
-    private DonHang mapRow(ResultSet rs) throws SQLException {
+    private DonHang themHang(ResultSet rs) throws SQLException {
         DonHang d = new DonHang();
         d.setMaDonHang(rs.getInt("maDonHang"));
         int maNguoiDung = rs.getInt("maNguoiDung");

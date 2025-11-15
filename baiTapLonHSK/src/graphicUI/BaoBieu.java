@@ -6,10 +6,10 @@ import java.awt.*;
 /**
  * ReportPanel contains tabs for daily/weekly/monthly revenue, top items, and export.
  */
-public class ReportPanel extends JPanel {
+public class BaoBieu extends JPanel {
     private JTabbedPane tabs;
 
-    public ReportPanel() {
+    public BaoBieu() {
         setLayout(new BorderLayout());
         tabs = new JTabbedPane();
         tabs.addTab("Doanh thu", new SalesReportPanel());
