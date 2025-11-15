@@ -5,10 +5,14 @@ import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
+import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
+import dao.DonHangDAO;
 import dao.TrangThaiBanDAO;
+import entity.DonHang;
 import entity.TrangThaiBan;
 
 import java.sql.*;
@@ -520,16 +524,62 @@ public class GiaoDienKhuVucBan extends JPanel {
     }
 
     private void showTakeawayOrdersDialog() {
-        // Placeholder dialog showing a simple list of takeaway orders
-        String[] sample = new String[]{"TAK001 - Đang chuẩn bị", "TAK002 - Đã sẵn sàng", "TAK003 - Đang giao"};
-        JList<String> list = new JList<>(sample);
+        java.util.List<DonHang> takeaways;
+        try {
+            DonHangDAO dao = new DonHangDAO();
+            takeaways = dao.layTheoLoaiDon("TAKEAWAY");
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Không thể tải danh sách đơn Takeaway từ cơ sở dữ liệu.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        if (takeaways == null || takeaways.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Chưa có đơn Takeaway nào.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        DefaultListModel<DonHang> model = new DefaultListModel<>();
+        for (DonHang d : takeaways) {
+            model.addElement(d);
+        }
+
+        final NumberFormat currencyFmt = NumberFormat.getNumberInstance(new Locale("vi", "VN"));
+        currencyFmt.setMaximumFractionDigits(0);
+
+        JList<DonHang> list = new JList<>(model);
         list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        list.setCellRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> jList, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+                Component comp = super.getListCellRendererComponent(jList, value, index, isSelected, cellHasFocus);
+                if (value instanceof DonHang) {
+                    DonHang d = (DonHang) value;
+                    StringBuilder sb = new StringBuilder();
+                    sb.append("ĐH #").append(d.getMaDonHang());
+                    if (d.getTongCuoi() != null) {
+                        sb.append(" - ").append(currencyFmt.format(d.getTongCuoi())).append(" đ");
+                    }
+                    if (d.getTrangThai() != null) {
+                        sb.append(" - ").append(d.getTrangThai());
+                    }
+                    setText(sb.toString());
+                }
+                return comp;
+            }
+        });
+
         JScrollPane sp = new JScrollPane(list);
-        sp.setPreferredSize(new Dimension(320, 160));
-        int ans = JOptionPane.showConfirmDialog(this, sp, "Danh sách đơn Takeaway (placeholder)", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        sp.setPreferredSize(new Dimension(360, 180));
+        int ans = JOptionPane.showConfirmDialog(this, sp, "Danh sách đơn Takeaway", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
         if (ans == JOptionPane.OK_OPTION) {
-            String sel = list.getSelectedValue();
-            if (sel != null) JOptionPane.showMessageDialog(this, "Chọn đơn: " + sel + " (placeholder)");
+            DonHang sel = list.getSelectedValue();
+            if (sel != null) {
+                JOptionPane.showMessageDialog(this,
+                        "Đơn hàng #" + sel.getMaDonHang() + " - Trạng thái: " + (sel.getTrangThai() != null ? sel.getTrangThai() : "Không rõ"),
+                        "Chi tiết đơn",
+                        JOptionPane.INFORMATION_MESSAGE);
+            }
         }
     }
 

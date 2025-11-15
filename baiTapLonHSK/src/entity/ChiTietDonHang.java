@@ -4,24 +4,40 @@ import java.math.BigDecimal;
 
 public class ChiTietDonHang {
     private int maChiTiet;
-    private int maDonHang;
-    private int maMon;
     private int soLuong;
     private BigDecimal giaBan;
     private BigDecimal thanhTien;
     private Integer maThue;
     private BigDecimal tienThue;
 
+    // Optional object references for convenience
+    private DonHang donHang;
+    private Mon mon;
+
     public ChiTietDonHang() {}
 
     public int getMaChiTiet() { return maChiTiet; }
     public void setMaChiTiet(int maChiTiet) { this.maChiTiet = maChiTiet; }
 
-    public int getMaDonHang() { return maDonHang; }
-    public void setMaDonHang(int maDonHang) { this.maDonHang = maDonHang; }
+    public Integer getMaDonHang() {
+        return donHang != null ? donHang.getMaDonHang() : null;
+    }
+    public void setMaDonHang(int maDonHang) {
+        if (this.donHang == null) {
+            this.donHang = new DonHang();
+        }
+        this.donHang.setMaDonHang(maDonHang);
+    }
 
-    public int getMaMon() { return maMon; }
-    public void setMaMon(int maMon) { this.maMon = maMon; }
+    public Integer getMaMon() {
+        return mon != null ? mon.getMaMon() : null;
+    }
+    public void setMaMon(int maMon) {
+        if (this.mon == null) {
+            this.mon = new Mon();
+        }
+        this.mon.setMaMon(maMon);
+    }
 
     public int getSoLuong() { return soLuong; }
     public void setSoLuong(int soLuong) { this.soLuong = soLuong; }
@@ -33,8 +49,21 @@ public class ChiTietDonHang {
     public void setThanhTien(BigDecimal thanhTien) { this.thanhTien = thanhTien; }
 
     public Integer getMaThue() { return maThue; }
-    public void setMaThue(Integer maThue) { this.maThue = maThue; }
+    public void setMaThue(Integer maThue) {
+        this.maThue = maThue;
+    }
 
     public BigDecimal getTienThue() { return tienThue; }
     public void setTienThue(BigDecimal tienThue) { this.tienThue = tienThue; }
+
+    public DonHang getDonHang() { return donHang; }
+    public void setDonHang(DonHang donHang) {
+        this.donHang = donHang;
+    }
+
+    public Mon getMon() { return mon; }
+    public void setMon(Mon mon) {
+        this.mon = mon;
+    }
+
 }
