@@ -49,7 +49,7 @@ public class DonHangDAO {
             ps.setBigDecimal(8, d.getTongCuoi());
             ps.setString(9, d.getTrangThai());
             ps.setString(10, d.getLoaiDon());
-            ps.setInt(11, d.getMaBan());
+            setNullableInt(ps, 11, d.getMaBan());
             int rows = ps.executeUpdate();
             if (rows > 0) {
                 try (ResultSet keys = ps.getGeneratedKeys()) {
@@ -79,7 +79,7 @@ public class DonHangDAO {
             ps.setBigDecimal(8, d.getTongCuoi());
             ps.setString(9, d.getTrangThai());
             ps.setString(10, d.getLoaiDon());
-            ps.setInt(11, d.getMaBan());
+            setNullableInt(ps, 11, d.getMaBan());
             ps.setInt(12, d.getMaDonHang());
             return ps.executeUpdate() > 0;
         } catch (SQLException ex) {
@@ -117,7 +117,8 @@ public class DonHangDAO {
         d.setTrangThai(rs.getString("trangThai"));
         d.setLoaiDon(rs.getString("loaiDon"));
         d.setThoiGianTao(rs.getTimestamp("thoiGianTao"));
-        d.setMaBan(rs.getInt("maBan"));
+        int maBan = rs.getInt("maBan");
+        d.setMaBan(rs.wasNull() ? null : maBan);
         return d;
     }
 

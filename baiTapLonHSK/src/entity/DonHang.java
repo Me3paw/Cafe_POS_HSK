@@ -16,7 +16,7 @@ public class DonHang {
     private String trangThai;
     private String loaiDon;
     private Timestamp thoiGianTao;
-    private int maBan;
+    private Integer maBan;
 
     public DonHang() {}
 
@@ -56,6 +56,6 @@ public class DonHang {
     public Timestamp getThoiGianTao() { return thoiGianTao; }
     public void setThoiGianTao(Timestamp thoiGianTao) { this.thoiGianTao = thoiGianTao; }
 
-    public int getMaBan() { return maBan; }
-    public void setMaBan(int maBan) { this.maBan = maBan; }
+    public Integer getMaBan() { return maBan; }
+    public void setMaBan(Integer maBan) { this.maBan = maBan; }
 }
