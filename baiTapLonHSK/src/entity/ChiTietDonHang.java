@@ -3,16 +3,19 @@ package entity;
 import java.math.BigDecimal;
 
 public class ChiTietDonHang {
-    private int id;
+    private int maChiTiet;
     private int maDonHang;
     private int maMon;
     private int soLuong;
-    private BigDecimal donGia;
+    private BigDecimal giaBan;
+    private BigDecimal thanhTien;
+    private Integer maThue;
+    private BigDecimal tienThue;
 
     public ChiTietDonHang() {}
 
-    public int getId() { return id; }
-    public void setId(int id) { this.id = id; }
+    public int getMaChiTiet() { return maChiTiet; }
+    public void setMaChiTiet(int maChiTiet) { this.maChiTiet = maChiTiet; }
 
     public int getMaDonHang() { return maDonHang; }
     public void setMaDonHang(int maDonHang) { this.maDonHang = maDonHang; }
@@ -23,6 +26,15 @@ public class ChiTietDonHang {
     public int getSoLuong() { return soLuong; }
     public void setSoLuong(int soLuong) { this.soLuong = soLuong; }
 
-    public BigDecimal getDonGia() { return donGia; }
-    public void setDonGia(BigDecimal donGia) { this.donGia = donGia; }
+    public BigDecimal getGiaBan() { return giaBan; }
+    public void setGiaBan(BigDecimal giaBan) { this.giaBan = giaBan; }
+
+    public BigDecimal getThanhTien() { return thanhTien; }
+    public void setThanhTien(BigDecimal thanhTien) { this.thanhTien = thanhTien; }
+
+    public Integer getMaThue() { return maThue; }
+    public void setMaThue(Integer maThue) { this.maThue = maThue; }
+
+    public BigDecimal getTienThue() { return tienThue; }
+    public void setTienThue(BigDecimal tienThue) { this.tienThue = tienThue; }
 }
