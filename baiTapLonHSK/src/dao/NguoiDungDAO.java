@@ -10,31 +10,35 @@ import java.util.List;
 public class NguoiDungDAO {
     public List<NguoiDung> getAll() {
         List<NguoiDung> res = new ArrayList<>();
-        String sql = "SELECT maND, ten, matKhau, quyen FROM NguoiDung";
+        String sql = "SELECT maNguoiDung, tenDangNhap, hoTen, vaiTro, matKhau, ngayTao FROM nguoiDung";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
                 NguoiDung n = new NguoiDung();
-                n.setMaND(rs.getString("maND"));
-                n.setTen(rs.getString("ten"));
+                n.setMaNguoiDung(rs.getInt("maNguoiDung"));
+                n.setTenDangNhap(rs.getString("tenDangNhap"));
+                n.setHoTen(rs.getString("hoTen"));
+                n.setVaiTro(rs.getString("vaiTro"));
                 n.setMatKhau(rs.getString("matKhau"));
-                n.setQuyen(rs.getString("quyen"));
+                n.setNgayTao(rs.getTimestamp("ngayTao"));
                 res.add(n);
             }
         } catch (SQLException ex) { ex.printStackTrace(); }
         return res;
     }
 
-    public NguoiDung getById(String maND) {
-        String sql = "SELECT maND, ten, matKhau, quyen FROM NguoiDung WHERE maND = ?";
+    public NguoiDung getById(int maNguoiDung) {
+        String sql = "SELECT maNguoiDung, tenDangNhap, hoTen, vaiTro, matKhau, ngayTao FROM nguoiDung WHERE maNguoiDung = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setString(1, maND);
+            ps.setInt(1, maNguoiDung);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
                     NguoiDung n = new NguoiDung();
-                    n.setMaND(rs.getString("maND"));
-                    n.setTen(rs.getString("ten"));
+                    n.setMaNguoiDung(rs.getInt("maNguoiDung"));
+                    n.setTenDangNhap(rs.getString("tenDangNhap"));
+                    n.setHoTen(rs.getString("hoTen"));
+                    n.setVaiTro(rs.getString("vaiTro"));
                     n.setMatKhau(rs.getString("matKhau"));
-                    n.setQuyen(rs.getString("quyen"));
+                    n.setNgayTao(rs.getTimestamp("ngayTao"));
                     return n;
                 }
             }
@@ -43,31 +47,41 @@ public class NguoiDungDAO {
     }
 
     public boolean insert(NguoiDung n) {
-        String sql = "INSERT INTO NguoiDung(maND, ten, matKhau, quyen) VALUES(?, ?, ?, ?)";
-        try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setString(1, n.getMaND());
-            ps.setString(2, n.getTen());
-            ps.setString(3, n.getMatKhau());
-            ps.setString(4, n.getQuyen());
-            return ps.executeUpdate() > 0;
+        String sql = "INSERT INTO nguoiDung(tenDangNhap, hoTen, vaiTro, matKhau) VALUES(?, ?, ?, ?)";
+        try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            ps.setString(1, n.getTenDangNhap());
+            ps.setString(2, n.getHoTen());
+            ps.setString(3, n.getVaiTro());
+            ps.setString(4, n.getMatKhau());
+            int rows = ps.executeUpdate();
+            if (rows > 0) {
+                try (ResultSet keys = ps.getGeneratedKeys()) {
+                    if (keys.next()) {
+                        n.setMaNguoiDung(keys.getInt(1));
+                    }
+                }
+                return true;
+            }
+            return false;
         } catch (SQLException ex) { ex.printStackTrace(); return false; }
     }
 
     public boolean update(NguoiDung n) {
-        String sql = "UPDATE NguoiDung SET ten = ?, matKhau = ?, quyen = ? WHERE maND = ?";
+        String sql = "UPDATE nguoiDung SET tenDangNhap = ?, hoTen = ?, vaiTro = ?, matKhau = ? WHERE maNguoiDung = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setString(1, n.getTen());
-            ps.setString(2, n.getMatKhau());
-            ps.setString(3, n.getQuyen());
-            ps.setString(4, n.getMaND());
+            ps.setString(1, n.getTenDangNhap());
+            ps.setString(2, n.getHoTen());
+            ps.setString(3, n.getVaiTro());
+            ps.setString(4, n.getMatKhau());
+            ps.setInt(5, n.getMaNguoiDung());
             return ps.executeUpdate() > 0;
         } catch (SQLException ex) { ex.printStackTrace(); return false; }
     }
 
-    public boolean delete(String maND) {
-        String sql = "DELETE FROM NguoiDung WHERE maND = ?";
+    public boolean delete(int maNguoiDung) {
+        String sql = "DELETE FROM nguoiDung WHERE maNguoiDung = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setString(1, maND);
+            ps.setInt(1, maNguoiDung);
             return ps.executeUpdate() > 0;
         } catch (SQLException ex) { ex.printStackTrace(); return false; }
     }

@@ -1,26 +1,28 @@
 package entity;
 
+import java.math.BigDecimal;
+
 public class ChiTietDonHang {
     private int id;
-    private String maDH;
-    private String maMon;
+    private int maDonHang;
+    private int maMon;
     private int soLuong;
-    private long donGia;
+    private BigDecimal donGia;
 
     public ChiTietDonHang() {}
 
     public int getId() { return id; }
     public void setId(int id) { this.id = id; }
 
-    public String getMaDH() { return maDH; }
-    public void setMaDH(String maDH) { this.maDH = maDH; }
+    public int getMaDonHang() { return maDonHang; }
+    public void setMaDonHang(int maDonHang) { this.maDonHang = maDonHang; }
 
-    public String getMaMon() { return maMon; }
-    public void setMaMon(String maMon) { this.maMon = maMon; }
+    public int getMaMon() { return maMon; }
+    public void setMaMon(int maMon) { this.maMon = maMon; }
 
     public int getSoLuong() { return soLuong; }
     public void setSoLuong(int soLuong) { this.soLuong = soLuong; }
 
-    public long getDonGia() { return donGia; }
-    public void setDonGia(long donGia) { this.donGia = donGia; }
+    public BigDecimal getDonGia() { return donGia; }
+    public void setDonGia(BigDecimal donGia) { this.donGia = donGia; }
 }

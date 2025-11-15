@@ -43,7 +43,7 @@ CREATE TABLE mon (
     maMon INT AUTO_INCREMENT PRIMARY KEY,
     maDanhMuc INT,
     tenMon VARCHAR(100) NOT NULL,
-    giaBan DECIMAL(8,2) NOT NULL,
+    giaBan DECIMAL(10,2) NOT NULL,
     conBan BOOLEAN DEFAULT TRUE,
     moTa TEXT,
     FOREIGN KEY (maDanhMuc) REFERENCES danhMuc(maDanhMuc)
@@ -62,7 +62,7 @@ CREATE TABLE giamGia (
     maGiamGia INT AUTO_INCREMENT PRIMARY KEY,
     tenChuongTrinh VARCHAR(100),
     loai ENUM('phanTram', 'coDinh') NOT NULL,
-    giaTri DECIMAL(8,2) NOT NULL,
+    giaTri DECIMAL(10,2) NOT NULL,
     hangApDung ENUM('dong', 'bac', 'vang', 'bachKim'),
     ngayBatDau DATE,
     ngayKetThuc DATE,
@@ -88,6 +88,27 @@ CREATE TABLE donHang (
     FOREIGN KEY (maCa) REFERENCES caLam(maCa),
     FOREIGN KEY (maKhachHang) REFERENCES khachHang(maKhachHang),
     FOREIGN KEY (maGiamGia) REFERENCES giamGia(maGiamGia)
+);
+
+-- Chi tiết đơn hàng
+CREATE TABLE chiTietDonHang (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    maDonHang INT NOT NULL,
+    maMon INT NOT NULL,
+    soLuong INT NOT NULL,
+    donGia DECIMAL(10,2) NOT NULL,
+    FOREIGN KEY (maDonHang) REFERENCES donHang(maDonHang),
+    FOREIGN KEY (maMon) REFERENCES mon(maMon)
+);
+
+-- Bảng thanh toán
+CREATE TABLE thanhToan (
+    maThanhToan INT AUTO_INCREMENT PRIMARY KEY,
+    maDonHang INT NOT NULL,
+    hinhThuc ENUM('tienMat', 'the', 'chuyenKhoan', 'viDienTu') NOT NULL,
+    soTien DECIMAL(10,2) NOT NULL,
+    thoiGian DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (maDonHang) REFERENCES donHang(maDonHang)
 );
 
 -- Trạng thái bàn

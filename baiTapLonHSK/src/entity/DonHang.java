@@ -1,28 +1,61 @@
 package entity;
 
+import java.math.BigDecimal;
 import java.sql.Timestamp;
 
 public class DonHang {
-    private String maDH;
-    private String maBan;
-    private Timestamp ngayTao;
-    private long tongTien;
+    private int maDonHang;
+    private Integer maNguoiDung;
+    private Integer maCa;
+    private Integer maKhachHang;
+    private Integer maGiamGia;
+    private BigDecimal tongTien;
+    private BigDecimal tienGiam;
+    private BigDecimal tienThue;
+    private BigDecimal tongCuoi;
     private String trangThai;
+    private String loaiDon;
+    private Timestamp thoiGianTao;
+    private int maBan;
 
     public DonHang() {}
 
-    public String getMaDH() { return maDH; }
-    public void setMaDH(String maDH) { this.maDH = maDH; }
+    public int getMaDonHang() { return maDonHang; }
+    public void setMaDonHang(int maDonHang) { this.maDonHang = maDonHang; }
 
-    public String getMaBan() { return maBan; }
-    public void setMaBan(String maBan) { this.maBan = maBan; }
+    public Integer getMaNguoiDung() { return maNguoiDung; }
+    public void setMaNguoiDung(Integer maNguoiDung) { this.maNguoiDung = maNguoiDung; }
 
-    public Timestamp getNgayTao() { return ngayTao; }
-    public void setNgayTao(Timestamp ngayTao) { this.ngayTao = ngayTao; }
+    public Integer getMaCa() { return maCa; }
+    public void setMaCa(Integer maCa) { this.maCa = maCa; }
 
-    public long getTongTien() { return tongTien; }
-    public void setTongTien(long tongTien) { this.tongTien = tongTien; }
+    public Integer getMaKhachHang() { return maKhachHang; }
+    public void setMaKhachHang(Integer maKhachHang) { this.maKhachHang = maKhachHang; }
+
+    public Integer getMaGiamGia() { return maGiamGia; }
+    public void setMaGiamGia(Integer maGiamGia) { this.maGiamGia = maGiamGia; }
+
+    public BigDecimal getTongTien() { return tongTien; }
+    public void setTongTien(BigDecimal tongTien) { this.tongTien = tongTien; }
+
+    public BigDecimal getTienGiam() { return tienGiam; }
+    public void setTienGiam(BigDecimal tienGiam) { this.tienGiam = tienGiam; }
+
+    public BigDecimal getTienThue() { return tienThue; }
+    public void setTienThue(BigDecimal tienThue) { this.tienThue = tienThue; }
+
+    public BigDecimal getTongCuoi() { return tongCuoi; }
+    public void setTongCuoi(BigDecimal tongCuoi) { this.tongCuoi = tongCuoi; }
 
     public String getTrangThai() { return trangThai; }
     public void setTrangThai(String trangThai) { this.trangThai = trangThai; }
+
+    public String getLoaiDon() { return loaiDon; }
+    public void setLoaiDon(String loaiDon) { this.loaiDon = loaiDon; }
+
+    public Timestamp getThoiGianTao() { return thoiGianTao; }
+    public void setThoiGianTao(Timestamp thoiGianTao) { this.thoiGianTao = thoiGianTao; }
+
+    public int getMaBan() { return maBan; }
+    public void setMaBan(int maBan) { this.maBan = maBan; }
 }

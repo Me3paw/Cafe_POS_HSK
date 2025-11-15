@@ -1,18 +1,24 @@
 package entity;
 
+import java.math.BigDecimal;
+
 public class Thue {
-    private String maThue;
-    private String ten;
-    private double phanTram;
+    private int maThue;
+    private String tenThue;
+    private BigDecimal tyLe;
+    private boolean dangApDung;
 
     public Thue() {}
 
-    public String getMaThue() { return maThue; }
-    public void setMaThue(String maThue) { this.maThue = maThue; }
+    public int getMaThue() { return maThue; }
+    public void setMaThue(int maThue) { this.maThue = maThue; }
 
-    public String getTen() { return ten; }
-    public void setTen(String ten) { this.ten = ten; }
+    public String getTenThue() { return tenThue; }
+    public void setTenThue(String tenThue) { this.tenThue = tenThue; }
 
-    public double getPhanTram() { return phanTram; }
-    public void setPhanTram(double phanTram) { this.phanTram = phanTram; }
+    public BigDecimal getTyLe() { return tyLe; }
+    public void setTyLe(BigDecimal tyLe) { this.tyLe = tyLe; }
+
+    public boolean isDangApDung() { return dangApDung; }
+    public void setDangApDung(boolean dangApDung) { this.dangApDung = dangApDung; }
 }
