@@ -3,11 +3,16 @@ package graphicUI;
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 
+import components.TableLayoutPanel;
+import components.TableLayoutPanel.CafeTable;
+
 import java.awt.*;
 import java.io.File;
 import java.io.PrintWriter;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * OperationPanel groups payment, printing, refunds, transfer/cancel operations.
@@ -16,12 +21,14 @@ import java.time.format.DateTimeFormatter;
 public class OperationPanel extends JPanel {
     private JTabbedPane tabs;
     private Component owner;
+    private PaymentPanel paymentPanel; // hold a reference so other inner panels can access table layout
 
-    public OperationPanel(Component owner) {
+    public OperationPanel(Component owner, TableLayoutPanel.TableModel tableModel) {
         this.owner = owner;
         setLayout(new BorderLayout());
         tabs = new JTabbedPane();
-        tabs.addTab("Thanh toán", new PaymentPanel());
+        paymentPanel = new PaymentPanel(tableModel);
+        tabs.addTab("Thanh toán", paymentPanel);
         tabs.addTab("In hóa đơn", new PrintPanel());
         tabs.addTab("Hoàn tiền", buildRefundTab()); // protected
         tabs.addTab("Chuyển bàn / Hủy đơn", new TransferCancelPanel());
@@ -49,176 +56,260 @@ public class OperationPanel extends JPanel {
     }
 
     static class PaymentPanel extends JPanel {
+        // Left side: list of orders and table layout
+        private final DefaultTableModel ordersModel;
+        private final JTable ordersTable;
+        private final TableLayoutPanel tableLayout;
+
+        // Right side: payment section
         private final DefaultTableModel productModel;
-        private final DefaultTableModel historyModel;
         private final JTable productTable;
-        private final JTable historyTable;
+        private final JTextField customerIdField = new JTextField(10);
+        private final JTextField customerNameField = new JTextField(12);
+        private final JTextField customerPhoneField = new JTextField(10);
         private final JTextField totalField = new JTextField(10);
         private final JTextField cashField = new JTextField(10);
+        private final JTextField discountField = new JTextField(8);
+        private final JTextField taxField = new JTextField(8);
         private final JLabel changeLabel = new JLabel("Tiền thối lại: 0 đ");
-        private final JLabel timeLabel = new JLabel("Chưa thanh toán");
-        private int transactionCounter = 1;
+        private final JRadioButton cashRadio = new JRadioButton("Tiền mặt");
+        private final JRadioButton bankRadio = new JRadioButton("Chuyển khoản");
 
-        public PaymentPanel() {
-            setLayout(new BorderLayout(15, 15));
-            setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        public PaymentPanel(TableLayoutPanel.TableModel sharedModel) {
+            setLayout(new BorderLayout(12, 12));
+            setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
             setBackground(new Color(250, 250, 255));
 
-            // ===== TIÊU ĐỀ =====
-            JLabel title = new JLabel("Thanh toán hóa đơn", SwingConstants.CENTER);
-            title.setFont(new Font("Segoe UI", Font.BOLD, 18));
-            title.setForeground(new Color(30, 60, 114));
-            add(title, BorderLayout.NORTH);
+            // ===== LEFT: orders list (top) and table layout (bottom) =====
+            ordersModel = new DefaultTableModel(new String[]{"Mã HĐ", "Bàn", "Trạng thái"}, 0);
+            ordersTable = new JTable(ordersModel);
+            JScrollPane ordersScroll = new JScrollPane(ordersTable);
+            ordersScroll.setBorder(BorderFactory.createTitledBorder("Danh sách hóa đơn (Chọn để load)"));
+            ordersTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 
-            // ===== BẢNG SẢN PHẨM =====
-            String[] productCols = {"Mã SP", "Tên sản phẩm", "Số lượng", "Giá (đ)", "Thành tiền (đ)"};
-            productModel = new DefaultTableModel(productCols, 0);
+            // populate sample orders
+            loadSampleOrders();
+
+            // Table layout panel in checkout mode (click should NOT change occupancy)
+            // Use the shared model so this panel and others reflect the same table objects
+            tableLayout = new TableLayoutPanel(TableLayoutPanel.Mode.CHECKOUT_MODE, sharedModel);
+             // Give the table layout a larger preferred size so it's fully visible
+             tableLayout.setPreferredSize(new Dimension(520, 320));
+             tableLayout.setMinimumSize(new Dimension(480, 280));
+             tableLayout.addTableSelectionListener(t -> loadOrderFromTable(t));
+
+            // When selecting an order from the list, load its placeholder products
+            ordersTable.getSelectionModel().addListSelectionListener(e -> {
+                if (!e.getValueIsAdjusting()) {
+                    int r = ordersTable.getSelectedRow();
+                    if (r >= 0) {
+                        String code = ordersModel.getValueAt(r, 0).toString();
+                        loadSampleProductsForOrder(code);
+                    }
+                }
+            });
+
+            // Limit the orders list height so the table layout keeps enough vertical space
+            ordersScroll.setPreferredSize(new Dimension(560, 160));
+            ordersScroll.setMinimumSize(new Dimension(480, 120));
+
+            JPanel leftPanel = new JPanel(new BorderLayout(8,8));
+            leftPanel.add(ordersScroll, BorderLayout.NORTH);
+            // ensure the table layout has room to paint fully
+            leftPanel.add(tableLayout, BorderLayout.CENTER);
+            // Give the left panel more horizontal space by default
+            leftPanel.setPreferredSize(new Dimension(620, 0));
+            leftPanel.setMinimumSize(new Dimension(520, 300));
+
+            // ===== RIGHT: thanh toán section =====
+            productModel = new DefaultTableModel(new String[]{"Mã SP", "Tên sản phẩm", "Số lượng", "Giá (đ)", "Thành tiền (đ)"}, 0);
             productTable = new JTable(productModel);
+            JScrollPane productScroll = new JScrollPane(productTable);
+            productScroll.setBorder(BorderFactory.createTitledBorder("Danh sách sản phẩm"));
             productTable.setFillsViewportHeight(true);
-            JScrollPane scrollProducts = new JScrollPane(productTable);
-            scrollProducts.setBorder(BorderFactory.createTitledBorder("Danh sách sản phẩm"));
 
-            // Panel chứa bảng + nút thêm/xóa
-            JPanel productPanel = new JPanel(new BorderLayout(8, 8));
-            JPanel productBtns = new JPanel();
-            JButton addProduct = new JButton("Thêm sản phẩm");
-            JButton removeProduct = new JButton("Xóa dòng");
-            productBtns.add(addProduct);
-            productBtns.add(removeProduct);
-            productPanel.add(scrollProducts, BorderLayout.CENTER);
-            productPanel.add(productBtns, BorderLayout.SOUTH);
-
-            // ===== KHU VỰC TÍNH TOÁN =====
-            JPanel paymentInfo = new JPanel(new GridLayout(4, 2, 8, 8));
+            // Payment info panel
+            JPanel paymentInfo = new JPanel(new GridBagLayout());
             paymentInfo.setBorder(BorderFactory.createTitledBorder("Thông tin thanh toán"));
-            paymentInfo.add(new JLabel("Tổng tiền:"));
-            totalField.setEditable(false);
-            paymentInfo.add(totalField);
-            paymentInfo.add(new JLabel("Khách đưa:"));
-            paymentInfo.add(cashField);
-            paymentInfo.add(new JLabel("Tiền thối lại:"));
-            paymentInfo.add(changeLabel);
-            paymentInfo.add(new JLabel("Thời gian thanh toán:"));
-            paymentInfo.add(timeLabel);
+            paymentInfo.setOpaque(false);
+            GridBagConstraints gbc = new GridBagConstraints();
+            gbc.insets = new Insets(6,6,6,6);
+            gbc.anchor = GridBagConstraints.WEST;
 
-            // ===== NÚT THANH TOÁN =====
-            JPanel payButtons = new JPanel();
-            JButton cashBtn = new JButton("Tiền mặt");
-            JButton cardBtn = new JButton("Thẻ");
-            payButtons.add(cashBtn);
-            payButtons.add(cardBtn);
+            int row = 0;
+            gbc.gridx = 0; gbc.gridy = row; paymentInfo.add(new JLabel("Mã KH:"), gbc);
+            gbc.gridx = 1; paymentInfo.add(customerIdField, gbc);
+            gbc.gridx = 2; paymentInfo.add(new JLabel("Mã giảm giá:"), gbc);
+            gbc.gridx = 3; paymentInfo.add(discountField, gbc);
 
-            // ===== LỊCH SỬ GIAO DỊCH =====
-            String[] historyCols = {"Mã GD", "Thời gian", "Tổng tiền (đ)"};
-            historyModel = new DefaultTableModel(historyCols, 0);
-            historyTable = new JTable(historyModel);
-            JScrollPane scrollHistory = new JScrollPane(historyTable);
-            scrollHistory.setBorder(BorderFactory.createTitledBorder("🧾 Lịch sử giao dịch"));
+            row++;
+            gbc.gridx = 0; gbc.gridy = row; paymentInfo.add(new JLabel("Tên KH:"), gbc);
+            gbc.gridx = 1; paymentInfo.add(customerNameField, gbc);
+            gbc.gridx = 2; paymentInfo.add(new JLabel("Thuế (%):"), gbc);
+            gbc.gridx = 3; paymentInfo.add(taxField, gbc);
 
-            // ===== GỘP PHẦN TRUNG TÂM =====
-            JPanel centerPanel = new JPanel(new BorderLayout(10, 10));
-            centerPanel.add(productPanel, BorderLayout.CENTER);
-            centerPanel.add(paymentInfo, BorderLayout.SOUTH);
-            add(centerPanel, BorderLayout.CENTER);
+            row++;
+            gbc.gridx = 0; gbc.gridy = row; paymentInfo.add(new JLabel("SĐT:"), gbc);
+            gbc.gridx = 1; paymentInfo.add(customerPhoneField, gbc);
+            gbc.gridx = 2; paymentInfo.add(new JLabel("Tổng tiền:"), gbc);
+            gbc.gridx = 3; paymentInfo.add(totalField, gbc);
 
-            add(payButtons, BorderLayout.SOUTH);
-            add(scrollHistory, BorderLayout.EAST);
+            row++;
+            gbc.gridx = 0; gbc.gridy = row; paymentInfo.add(new JLabel("Khách đưa:"), gbc);
+            gbc.gridx = 1; paymentInfo.add(cashField, gbc);
+            gbc.gridx = 2; gbc.gridwidth = 2; paymentInfo.add(changeLabel, gbc);
+            gbc.gridwidth = 1;
 
-            // ===== SỰ KIỆN =====
-            addProduct.addActionListener(e -> addProductRow());
-            removeProduct.addActionListener(e -> removeSelectedProduct());
-            cashBtn.addActionListener(e -> handlePayment("Tiền mặt"));
-            cardBtn.addActionListener(e -> handlePayment("Thẻ"));
+            // Payment method radios + button
+            ButtonGroup methodGroup = new ButtonGroup();
+            methodGroup.add(cashRadio);
+            methodGroup.add(bankRadio);
+            cashRadio.setSelected(true);
+
+            JPanel methodPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+            methodPanel.setOpaque(false);
+            methodPanel.add(cashRadio);
+            methodPanel.add(bankRadio);
+
+            JButton payBtn = new JButton("Thanh toán");
+
+            JPanel rightTop = new JPanel(new BorderLayout(8,8));
+            rightTop.add(productScroll, BorderLayout.CENTER);
+            rightTop.add(paymentInfo, BorderLayout.SOUTH);
+
+            JPanel rightBottom = new JPanel(new BorderLayout(8,8));
+            rightBottom.setBorder(BorderFactory.createEmptyBorder(8,0,0,0));
+            rightBottom.setOpaque(false);
+            rightBottom.add(methodPanel, BorderLayout.WEST);
+            rightBottom.add(payBtn, BorderLayout.EAST);
+
+            JPanel rightPanel = new JPanel(new BorderLayout(8,8));
+            rightPanel.add(rightTop, BorderLayout.CENTER);
+            rightPanel.add(rightBottom, BorderLayout.SOUTH);
+
+            JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftPanel, rightPanel);
+            // give the left side more space initially and allow continuous layout while resizing
+            split.setContinuousLayout(true);
+            split.setResizeWeight(0.60); // left gets ~60% of the width
+            // set an initial proportional divider location; framework will use this after UI is realized
+            split.setDividerLocation(0.60);
+            add(split, BorderLayout.CENTER);
+
+            // ===== Events =====
+            // Clicking a table should load a placeholder order into product list
+            tableLayout.addTableSelectionListener(t -> loadSampleProductsFromTable(t));
+
+            payBtn.addActionListener(e -> processPayment());
         }
 
-        private void addProductRow() {
-            JTextField id = new JTextField();
-            JTextField name = new JTextField();
-            JTextField qty = new JTextField("1");
-            JTextField price = new JTextField();
+        // expose tableLayout so other panels can use the shared list
+        public TableLayoutPanel getTableLayout() { return tableLayout; }
 
-            JPanel panel = new JPanel(new GridLayout(4, 2, 5, 5));
-            panel.add(new JLabel("Mã SP:"));
-            panel.add(id);
-            panel.add(new JLabel("Tên SP:"));
-            panel.add(name);
-            panel.add(new JLabel("Số lượng:"));
-            panel.add(qty);
-            panel.add(new JLabel("Giá:"));
-            panel.add(price);
+        private void loadSampleOrders() {
+            // Use table names that match the default layout in TableLayoutPanel (T1..T11)
+            ordersModel.addRow(new Object[]{"HD001", "T1", "Đang phục vụ"});
+            ordersModel.addRow(new Object[]{"HD002", "T2", "Đã thanh toán"});
+            ordersModel.addRow(new Object[]{"HD003", "T3", "Chưa in"});
+            ordersModel.addRow(new Object[]{"HD004", "T4", "Đang phục vụ"});
+            ordersModel.addRow(new Object[]{"HD005", "T5", "Đang phục vụ"});
+            ordersModel.addRow(new Object[]{"HD006", "T6", "Đã thanh toán"});
+            ordersModel.addRow(new Object[]{"HD007", "T7", "Chưa in"});
+            ordersModel.addRow(new Object[]{"HD008", "T8", "Đang phục vụ"});
+            ordersModel.addRow(new Object[]{"HD009", "T9", "Đã thanh toán"});
+            ordersModel.addRow(new Object[]{"HD010", "T10", "Chưa in"});
+            ordersModel.addRow(new Object[]{"HD011", "T11", "Đang phục vụ"});
+        }
 
-            int result = JOptionPane.showConfirmDialog(this, panel, "Thêm sản phẩm", JOptionPane.OK_CANCEL_OPTION);
-            if (result == JOptionPane.OK_OPTION) {
-                try {
-                    int quantity = Integer.parseInt(qty.getText());
-                    double unitPrice = Double.parseDouble(price.getText());
-                    double total = quantity * unitPrice;
-                    productModel.addRow(new Object[]{id.getText(), name.getText(), quantity, unitPrice, total});
-                    updateTotal();
-                } catch (NumberFormatException ex) {
-                    JOptionPane.showMessageDialog(this, "Giá và số lượng phải là số hợp lệ!", "Lỗi nhập liệu", JOptionPane.ERROR_MESSAGE);
+        // When user clicks a table in layout
+        private void loadSampleProductsFromTable(CafeTable t) {
+            // placeholder: create a temporary order using table name
+            String orderId = "TMP-" + t.name;
+            loadSampleProductsForOrder(orderId);
+            // mark the selection in orders table if present
+            for (int i=0;i<ordersModel.getRowCount();i++){
+                if (ordersModel.getValueAt(i,1).toString().equalsIgnoreCase(t.name)){
+                    ordersTable.setRowSelectionInterval(i,i);
+                    ordersTable.scrollRectToVisible(ordersTable.getCellRect(i,0,true));
+                    return;
                 }
             }
         }
 
-        private void removeSelectedProduct() {
-            int row = productTable.getSelectedRow();
-            if (row >= 0) {
-                productModel.removeRow(row);
-                updateTotal();
-            } else {
-                JOptionPane.showMessageDialog(this, "Vui lòng chọn dòng cần xóa!");
-            }
+        private void loadOrderFromTable(CafeTable t) {
+            // just delegate to sample loader
+            loadSampleProductsFromTable(t);
         }
 
-        private void updateTotal() {
+        private void loadSampleProductsForOrder(String orderId) {
+            // clear
+            productModel.setRowCount(0);
+            // placeholder products depending on orderId
+            if (orderId.contains("HD001") || orderId.contains("TMP-T1")) {
+                productModel.addRow(new Object[]{"SP001", "Cà phê sữa", 2, 25000, 50000});
+                productModel.addRow(new Object[]{"SP002", "Bánh ngọt", 1, 70000, 70000});
+            } else if (orderId.contains("HD002") || orderId.contains("TMP-T2")) {
+                productModel.addRow(new Object[]{"SP003", "Trà đào", 1, 45000, 45000});
+                productModel.addRow(new Object[]{"SP004", "Bánh mì bơ tỏi", 2, 20000, 40000});
+            } else {
+                productModel.addRow(new Object[]{"SP005", "Cà phê đen", 1, 25000, 25000});
+                productModel.addRow(new Object[]{"SP006", "Nước suối", 1, 20000, 20000});
+            }
+            updateTotalFromProducts();
+        }
+
+        private void updateTotalFromProducts() {
             double sum = 0;
             for (int i = 0; i < productModel.getRowCount(); i++) {
-                sum += Double.parseDouble(productModel.getValueAt(i, 4).toString());
+                Object v = productModel.getValueAt(i, 4);
+                if (v != null) try { sum += Double.parseDouble(v.toString().replace(",","")); } catch (Exception ex) { }
             }
             totalField.setText(String.format("%,.0f", sum));
         }
 
-        private void handlePayment(String method) {
+        private void processPayment() {
             if (productModel.getRowCount() == 0) {
-                JOptionPane.showMessageDialog(this, "Chưa có sản phẩm trong hóa đơn!");
+                JOptionPane.showMessageDialog(this, "Danh sách sản phẩm rỗng!", "Cảnh báo", JOptionPane.WARNING_MESSAGE);
                 return;
             }
 
-            try {
-                double total = Double.parseDouble(totalField.getText().replace(",", ""));
-                double cash = Double.parseDouble(cashField.getText());
-                if (cash < total) {
-                    JOptionPane.showMessageDialog(this, "Khách đưa chưa đủ tiền!", "Cảnh báo", JOptionPane.WARNING_MESSAGE);
-                    return;
+            int confirm = JOptionPane.showConfirmDialog(this, "Xác nhận thanh toán?", "Xác nhận", JOptionPane.YES_NO_OPTION);
+            if (confirm != JOptionPane.YES_OPTION) return;
+
+            // after confirm, show print option dialog
+            int printOpt = JOptionPane.showOptionDialog(this,
+                    "Thanh toán thành công. Bạn có muốn in hóa đơn?",
+                    "In hóa đơn",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.QUESTION_MESSAGE,
+                    null,
+                    new String[]{"In hóa đơn", "Đóng"},
+                    "In hóa đơn");
+
+            if (printOpt == JOptionPane.YES_OPTION) {
+                // simulate print: show a dialog with invoice content (placeholder)
+                StringBuilder invoice = new StringBuilder();
+                invoice.append("***** HÓA ĐƠN *****\n");
+                invoice.append("Khách: ").append(customerNameField.getText()).append("\n");
+                invoice.append("SĐT: ").append(customerPhoneField.getText()).append("\n");
+                invoice.append("--------------------------------\n");
+                for (int i = 0; i < productModel.getRowCount(); i++) {
+                    invoice.append(productModel.getValueAt(i,1)).append(" x").append(productModel.getValueAt(i,2)).append("   ").append(productModel.getValueAt(i,4)).append("\n");
                 }
-
-                double change = cash - total;
-                changeLabel.setText(String.format("%,.0f đ", change));
-
-                LocalDateTime now = LocalDateTime.now();
-                DateTimeFormatter fmt = DateTimeFormatter.ofPattern("HH:mm:ss - dd/MM/yyyy");
-                timeLabel.setText(now.format(fmt));
-
-                // Ghi lịch sử
-                String id = "GD" + String.format("%03d", transactionCounter++);
-                historyModel.addRow(new Object[]{id, now.format(fmt), String.format("%,.0f", total)});
-
-                JOptionPane.showMessageDialog(this,
-                        "Thanh toán thành công bằng " + method + "\n" +
-                                "Tổng tiền: " + total + " đ\n" +
-                                "Tiền thối lại: " + change + " đ\n" +
-                                "Thời gian: " + now.format(fmt),
-                        "Thành công", JOptionPane.INFORMATION_MESSAGE);
-
-                // Reset bảng sản phẩm
-                productModel.setRowCount(0);
-                updateTotal();
-                cashField.setText("");
-                changeLabel.setText("Tiền thối lại: 0 đ");
-            } catch (NumberFormatException ex) {
-                JOptionPane.showMessageDialog(this, "Vui lòng nhập số hợp lệ!", "Lỗi nhập liệu", JOptionPane.ERROR_MESSAGE);
+                invoice.append("--------------------------------\n");
+                invoice.append("Tổng: ").append(totalField.getText()).append(" đ\n");
+                JOptionPane.showMessageDialog(this, invoice.toString(), "Hóa đơn (giả lập)", JOptionPane.INFORMATION_MESSAGE);
             }
+
+            // clear after payment
+            productModel.setRowCount(0);
+            totalField.setText("");
+            cashField.setText("");
+            changeLabel.setText("Tiền thối lại: 0 đ");
+            customerIdField.setText("");
+            customerNameField.setText("");
+            customerPhoneField.setText("");
+            discountField.setText("");
+            taxField.setText("");
         }
     }
     static class PrintPanel extends JPanel {
@@ -515,7 +606,7 @@ public class OperationPanel extends JPanel {
         }
     }
 
-    static class TransferCancelPanel extends JPanel {
+    class TransferCancelPanel extends JPanel {
         private final JTable orderTable;
         private final DefaultTableModel orderModel;
         private final JTextField newTableField = new JTextField(10);
@@ -624,23 +715,52 @@ public class OperationPanel extends JPanel {
                 JOptionPane.showMessageDialog(this, "Vui lòng chọn đơn hàng để chuyển bàn!", "Cảnh báo", JOptionPane.WARNING_MESSAGE);
                 return;
             }
-            String newTable = newTableField.getText().trim();
-            if (newTable.isEmpty()) {
-                JOptionPane.showMessageDialog(this, "Nhập bàn mới để chuyển!", "Lỗi", JOptionPane.WARNING_MESSAGE);
-                return;
-            }
 
             String orderId = orderModel.getValueAt(row, 0).toString();
             String oldTable = orderModel.getValueAt(row, 1).toString();
 
-            int confirm = JOptionPane.showConfirmDialog(this,
-                    "Xác nhận chuyển đơn " + orderId + " từ " + oldTable + " sang " + newTable + "?",
-                    "Xác nhận chuyển bàn", JOptionPane.YES_NO_OPTION);
+            // Use the real shared tables from the payment panel layout and start a transfer
+            TableLayoutPanel layout = OperationPanel.this.paymentPanel.getTableLayout();
+            boolean started = layout.beginTransferFrom(oldTable);
+            if (!started) return;
 
-            if (confirm == JOptionPane.YES_OPTION) {
-                orderModel.setValueAt(newTable, row, 1);
-                updateTimeLabel("Chuyển bàn " + orderId + " thành công!");
+            // Add a temporary listener that will be notified when the transfer completes inside the layout
+            final int selRow = row;
+            final String selOrderId = orderId;
+            TableLayoutPanel.TableSelectionListener temp = new TableLayoutPanel.TableSelectionListener() {
+                @Override
+                public void tableSelected(TableLayoutPanel.CafeTable t) {
+                    // Update order model and UI and remove this listener
+                    SwingUtilities.invokeLater(() -> {
+                        orderModel.setValueAt(t.name, selRow, 1);
+                        updateTimeLabel("Chuyển bàn " + selOrderId + " thành công!");
+                        layout.removeTableSelectionListener(this);
+                    });
+                }
+            };
+            layout.addTableSelectionListener(temp);
+        }
+
+        // helper trying to map strings like "Bàn 1" or "T1" to the CafeTable instances
+        private TableLayoutPanel.CafeTable findMatchingTable(List<TableLayoutPanel.CafeTable> tables, String label) {
+            if (label == null) return null;
+            // direct match first
+            for (TableLayoutPanel.CafeTable t : tables) {
+                if (t.name != null && t.name.equalsIgnoreCase(label)) return t;
             }
+            // try to extract a number from label (e.g. "Bàn 1" -> 1) and match T<number>
+            String digits = label.replaceAll("\\D+", "");
+            if (!digits.isEmpty()) {
+                String tname = "T" + digits;
+                for (TableLayoutPanel.CafeTable t : tables) {
+                    if (t.name != null && t.name.startsWith(tname)) return t;
+                }
+            }
+            // fallback: match contains
+            for (TableLayoutPanel.CafeTable t : tables) {
+                if (t.name != null && label.contains(t.name)) return t;
+            }
+            return null;
         }
 
         private void handleCancel() {

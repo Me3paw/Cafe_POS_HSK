@@ -4,6 +4,11 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 
+import components.TableLayoutPanel;
+import dao.TrangThaiBanDAO;
+import entity.TrangThaiBan;
+import java.util.List;
+
 /**
  * MainFrame is the main application window. It has a left sidebar menu and a CardLayout content area.
  */
@@ -26,6 +31,9 @@ public class MainFrame extends JFrame {
     private SearchPanel searchPanel;
     private OperationPanel operationPanel;
     private ReportPanel reportPanel;
+
+    // single shared TableModel instance
+    private final TableLayoutPanel.TableModel sharedTableModel = new TableLayoutPanel.TableModel(TableLayoutPanel.copyDefaultLayout());
 
     public MainFrame() {
         super("Café POS - Phiên bản mẫu");
@@ -53,9 +61,10 @@ public class MainFrame extends JFrame {
 
         systemPanel = new SystemPanel();
         catalogPanel = new CatalogPanel();
-        updatePanel = new UpdatePanel();
+        // initialize panels with shared model
+        updatePanel = new UpdatePanel(sharedTableModel);
         searchPanel = new SearchPanel(this);
-        operationPanel = new OperationPanel(this);
+        operationPanel = new OperationPanel(this, sharedTableModel);
         reportPanel = new ReportPanel();
 
         contentPanel.add(systemPanel, SYSTEM);
@@ -69,9 +78,28 @@ public class MainFrame extends JFrame {
         getContentPane().add(menuPanel, BorderLayout.WEST);
         getContentPane().add(contentPanel, BorderLayout.CENTER);
 
+        // After UI components are created, load statuses from DB and merge into model
+        mergeTableStatusesFromDB();
+
         // Default view: Update -> Đơn hàng mới
         showCard(UPDATE);
         updatePanel.showDefault();
+    }
+
+    private void mergeTableStatusesFromDB() {
+        try {
+            TrangThaiBanDAO dao = new TrangThaiBanDAO();
+            // Ensure DB has rows for our default layout when empty
+            dao.initFromCafeTables(sharedTableModel.getTables());
+            List<TrangThaiBan> list = dao.getAll();
+            if (list != null) {
+                // mergeStatuses expects integer maBan values in the DB rows
+                sharedTableModel.mergeStatuses(list);
+            }
+        } catch (Exception ex) {
+            // do not block UI; just log
+            ex.printStackTrace();
+        }
     }
 
     private void addMenuButton(String title, String card) {
