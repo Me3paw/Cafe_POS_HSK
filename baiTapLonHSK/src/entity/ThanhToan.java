@@ -1,28 +1,29 @@
 package entity;
 
+import java.math.BigDecimal;
 import java.sql.Timestamp;
 
 public class ThanhToan {
-    private String maTT;
-    private String maDH;
+    private int maThanhToan;
+    private int maDonHang;
     private String hinhThuc;
-    private long soTien;
-    private Timestamp ngay;
+    private BigDecimal soTien;
+    private Timestamp thoiGian;
 
     public ThanhToan() {}
 
-    public String getMaTT() { return maTT; }
-    public void setMaTT(String maTT) { this.maTT = maTT; }
+    public int getMaThanhToan() { return maThanhToan; }
+    public void setMaThanhToan(int maThanhToan) { this.maThanhToan = maThanhToan; }
 
-    public String getMaDH() { return maDH; }
-    public void setMaDH(String maDH) { this.maDH = maDH; }
+    public int getMaDonHang() { return maDonHang; }
+    public void setMaDonHang(int maDonHang) { this.maDonHang = maDonHang; }
 
     public String getHinhThuc() { return hinhThuc; }
     public void setHinhThuc(String hinhThuc) { this.hinhThuc = hinhThuc; }
 
-    public long getSoTien() { return soTien; }
-    public void setSoTien(long soTien) { this.soTien = soTien; }
+    public BigDecimal getSoTien() { return soTien; }
+    public void setSoTien(BigDecimal soTien) { this.soTien = soTien; }
 
-    public Timestamp getNgay() { return ngay; }
-    public void setNgay(Timestamp ngay) { this.ngay = ngay; }
+    public Timestamp getThoiGian() { return thoiGian; }
+    public void setThoiGian(Timestamp thoiGian) { this.thoiGian = thoiGian; }
 }

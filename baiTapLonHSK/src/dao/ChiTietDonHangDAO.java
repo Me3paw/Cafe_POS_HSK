@@ -10,16 +10,10 @@ import java.util.List;
 public class ChiTietDonHangDAO {
     public List<ChiTietDonHang> getAll() {
         List<ChiTietDonHang> res = new ArrayList<>();
-        String sql = "SELECT id, maDH, maMon, soLuong, donGia FROM ChiTietDonHang";
+        String sql = "SELECT id, maDonHang, maMon, soLuong, donGia FROM chiTietDonHang";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
-                ChiTietDonHang ct = new ChiTietDonHang();
-                ct.setId(rs.getInt("id"));
-                ct.setMaDH(rs.getString("maDH"));
-                ct.setMaMon(rs.getString("maMon"));
-                ct.setSoLuong(rs.getInt("soLuong"));
-                ct.setDonGia(rs.getLong("donGia"));
-                res.add(ct);
+                res.add(mapRow(rs));
             }
         } catch (SQLException ex) {
             ex.printStackTrace();
@@ -28,18 +22,12 @@ public class ChiTietDonHangDAO {
     }
 
     public ChiTietDonHang getById(int id) {
-        String sql = "SELECT id, maDH, maMon, soLuong, donGia FROM ChiTietDonHang WHERE id = ?";
+        String sql = "SELECT id, maDonHang, maMon, soLuong, donGia FROM chiTietDonHang WHERE id = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, id);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    ChiTietDonHang ct = new ChiTietDonHang();
-                    ct.setId(rs.getInt("id"));
-                    ct.setMaDH(rs.getString("maDH"));
-                    ct.setMaMon(rs.getString("maMon"));
-                    ct.setSoLuong(rs.getInt("soLuong"));
-                    ct.setDonGia(rs.getLong("donGia"));
-                    return ct;
+                    return mapRow(rs);
                 }
             }
         } catch (SQLException ex) {
@@ -49,12 +37,12 @@ public class ChiTietDonHangDAO {
     }
 
     public boolean insert(ChiTietDonHang ct) {
-        String sql = "INSERT INTO ChiTietDonHang(maDH, maMon, soLuong, donGia) VALUES(?, ?, ?, ?)";
+        String sql = "INSERT INTO chiTietDonHang(maDonHang, maMon, soLuong, donGia) VALUES(?, ?, ?, ?)";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            ps.setString(1, ct.getMaDH());
-            ps.setString(2, ct.getMaMon());
+            ps.setInt(1, ct.getMaDonHang());
+            ps.setInt(2, ct.getMaMon());
             ps.setInt(3, ct.getSoLuong());
-            ps.setLong(4, ct.getDonGia());
+            ps.setBigDecimal(4, ct.getDonGia());
             int rows = ps.executeUpdate();
             if (rows > 0) {
                 try (ResultSet keys = ps.getGeneratedKeys()) {
@@ -70,12 +58,12 @@ public class ChiTietDonHangDAO {
     }
 
     public boolean update(ChiTietDonHang ct) {
-        String sql = "UPDATE ChiTietDonHang SET maDH = ?, maMon = ?, soLuong = ?, donGia = ? WHERE id = ?";
+        String sql = "UPDATE chiTietDonHang SET maDonHang = ?, maMon = ?, soLuong = ?, donGia = ? WHERE id = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setString(1, ct.getMaDH());
-            ps.setString(2, ct.getMaMon());
+            ps.setInt(1, ct.getMaDonHang());
+            ps.setInt(2, ct.getMaMon());
             ps.setInt(3, ct.getSoLuong());
-            ps.setLong(4, ct.getDonGia());
+            ps.setBigDecimal(4, ct.getDonGia());
             ps.setInt(5, ct.getId());
             return ps.executeUpdate() > 0;
         } catch (SQLException ex) {
@@ -85,7 +73,7 @@ public class ChiTietDonHangDAO {
     }
 
     public boolean delete(int id) {
-        String sql = "DELETE FROM ChiTietDonHang WHERE id = ?";
+        String sql = "DELETE FROM chiTietDonHang WHERE id = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, id);
             return ps.executeUpdate() > 0;
@@ -93,5 +81,15 @@ public class ChiTietDonHangDAO {
             ex.printStackTrace();
             return false;
         }
+    }
+
+    private ChiTietDonHang mapRow(ResultSet rs) throws SQLException {
+        ChiTietDonHang ct = new ChiTietDonHang();
+        ct.setId(rs.getInt("id"));
+        ct.setMaDonHang(rs.getInt("maDonHang"));
+        ct.setMaMon(rs.getInt("maMon"));
+        ct.setSoLuong(rs.getInt("soLuong"));
+        ct.setDonGia(rs.getBigDecimal("donGia"));
+        return ct;
     }
 }

@@ -13,13 +13,7 @@ public class TrangThaiBanDAO {
         String sql = "SELECT maBan, maDonHang, trangThai, soNguoi, capNhatCuoi FROM trangThaiBan";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
-                TrangThaiBan t = new TrangThaiBan();
-                t.setMaBan(rs.getString("maBan"));
-                t.setMaDonHang(rs.getString("maDonHang"));
-                t.setTrangThai(rs.getString("trangThai"));
-                t.setSoNguoi(rs.getObject("soNguoi", Integer.class));
-                t.setCapNhatCuoi(rs.getTimestamp("capNhatCuoi"));
-                res.add(t);
+                res.add(mapRow(rs));
             }
         } catch (SQLException ex) {
             ex.printStackTrace();
@@ -27,19 +21,13 @@ public class TrangThaiBanDAO {
         return res;
     }
 
-    public TrangThaiBan getById(String maBan) {
+    public TrangThaiBan getById(int maBan) {
         String sql = "SELECT maBan, maDonHang, trangThai, soNguoi, capNhatCuoi FROM trangThaiBan WHERE maBan = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setString(1, maBan);
+            ps.setInt(1, maBan);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    TrangThaiBan t = new TrangThaiBan();
-                    t.setMaBan(rs.getString("maBan"));
-                    t.setMaDonHang(rs.getString("maDonHang"));
-                    t.setTrangThai(rs.getString("trangThai"));
-                    t.setSoNguoi(rs.getObject("soNguoi", Integer.class));
-                    t.setCapNhatCuoi(rs.getTimestamp("capNhatCuoi"));
-                    return t;
+                    return mapRow(rs);
                 }
             }
         } catch (SQLException ex) {
@@ -51,13 +39,10 @@ public class TrangThaiBanDAO {
     public boolean insert(TrangThaiBan t) {
         String sql = "INSERT INTO trangThaiBan(maBan, maDonHang, trangThai, soNguoi, capNhatCuoi) VALUES(?, ?, ?, ?, ?)";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setString(1, t.getMaBan());
-            // maDonHang may be provided; otherwise keep NULL
-            if (t.getMaDonHang() != null) ps.setString(2, t.getMaDonHang());
-            else ps.setObject(2, null, Types.VARCHAR);
+            ps.setInt(1, t.getMaBan());
+            setNullableInt(ps, 2, t.getMaDonHang());
             ps.setString(3, t.getTrangThai());
-            if (t.getSoNguoi() != null) ps.setObject(4, t.getSoNguoi(), Types.INTEGER);
-            else ps.setObject(4, null, Types.INTEGER);
+            setNullableInt(ps, 4, t.getSoNguoi());
             if (t.getCapNhatCuoi() != null) ps.setTimestamp(5, t.getCapNhatCuoi());
             else ps.setTimestamp(5, new Timestamp(System.currentTimeMillis()));
             return ps.executeUpdate() > 0;
@@ -68,13 +53,13 @@ public class TrangThaiBanDAO {
     }
 
     public boolean update(TrangThaiBan t) {
-        String sql = "UPDATE trangThaiBan SET trangThai = ?, soNguoi = ?, capNhatCuoi = ? WHERE maBan = ?";
+        String sql = "UPDATE trangThaiBan SET maDonHang = ?, trangThai = ?, soNguoi = ?, capNhatCuoi = ? WHERE maBan = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setString(1, t.getTrangThai());
-            if (t.getSoNguoi() != null) ps.setObject(2, t.getSoNguoi(), Types.INTEGER);
-            else ps.setObject(2, null, Types.INTEGER);
-            ps.setTimestamp(3, new Timestamp(System.currentTimeMillis()));
-            ps.setString(4, t.getMaBan());
+            setNullableInt(ps, 1, t.getMaDonHang());
+            ps.setString(2, t.getTrangThai());
+            setNullableInt(ps, 3, t.getSoNguoi());
+            ps.setTimestamp(4, new Timestamp(System.currentTimeMillis()));
+            ps.setInt(5, t.getMaBan());
             return ps.executeUpdate() > 0;
         } catch (SQLException ex) {
             ex.printStackTrace();
@@ -101,13 +86,13 @@ public class TrangThaiBanDAO {
         }
 
         // Table is empty: insert rows for integer maBan values (>0)
-        String insertSql = "INSERT INTO trangThaiBan(maBan, maDonHang, trangThai, soNguoi, capNhatCuoi) VALUES(?, NULL, 'TRONG', NULL, NOW())";
+        String insertSql = "INSERT INTO trangThaiBan(maBan, maDonHang, trangThai, soNguoi, capNhatCuoi) VALUES(?, NULL, 'trong', NULL, NOW())";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(insertSql)) {
             for (components.TableLayoutPanel.CafeTable t : tables) {
                 if (t == null) continue;
                 // only use positive integer ids; skip takeaway (maBan==0)
                 if (t.maBan <= 0) continue;
-                ps.setString(1, String.valueOf(t.maBan));
+                ps.setInt(1, t.maBan);
                 ps.addBatch();
             }
             ps.executeBatch();
@@ -116,14 +101,34 @@ public class TrangThaiBanDAO {
         }
     }
 
-    public boolean delete(String maBan) {
+    public boolean delete(int maBan) {
         String sql = "DELETE FROM trangThaiBan WHERE maBan = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setString(1, maBan);
+            ps.setInt(1, maBan);
             return ps.executeUpdate() > 0;
         } catch (SQLException ex) {
             ex.printStackTrace();
             return false;
         }
+    }
+
+    private void setNullableInt(PreparedStatement ps, int index, Integer value) throws SQLException {
+        if (value != null) {
+            ps.setInt(index, value);
+        } else {
+            ps.setNull(index, Types.INTEGER);
+        }
+    }
+
+    private TrangThaiBan mapRow(ResultSet rs) throws SQLException {
+        TrangThaiBan t = new TrangThaiBan();
+        t.setMaBan(rs.getInt("maBan"));
+        int maDonHang = rs.getInt("maDonHang");
+        t.setMaDonHang(rs.wasNull() ? null : maDonHang);
+        t.setTrangThai(rs.getString("trangThai"));
+        int soNguoi = rs.getInt("soNguoi");
+        t.setSoNguoi(rs.wasNull() ? null : soNguoi);
+        t.setCapNhatCuoi(rs.getTimestamp("capNhatCuoi"));
+        return t;
     }
 }

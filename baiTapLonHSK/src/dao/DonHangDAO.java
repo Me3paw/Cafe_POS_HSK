@@ -10,16 +10,10 @@ import java.util.List;
 public class DonHangDAO {
     public List<DonHang> getAll() {
         List<DonHang> res = new ArrayList<>();
-        String sql = "SELECT maDH, maBan, ngayTao, tongTien, trangThai FROM DonHang";
+        String sql = "SELECT maDonHang, maNguoiDung, maCa, maKhachHang, maGiamGia, tongTien, tienGiam, tienThue, tongCuoi, trangThai, loaiDon, thoiGianTao, maBan FROM donHang";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
-                DonHang d = new DonHang();
-                d.setMaDH(rs.getString("maDH"));
-                d.setMaBan(rs.getString("maBan"));
-                d.setNgayTao(rs.getTimestamp("ngayTao"));
-                d.setTongTien(rs.getLong("tongTien"));
-                d.setTrangThai(rs.getString("trangThai"));
-                res.add(d);
+                res.add(mapRow(rs));
             }
         } catch (SQLException ex) {
             ex.printStackTrace();
@@ -27,19 +21,13 @@ public class DonHangDAO {
         return res;
     }
 
-    public DonHang getById(String maDH) {
-        String sql = "SELECT maDH, maBan, ngayTao, tongTien, trangThai FROM DonHang WHERE maDH = ?";
+    public DonHang getById(int maDonHang) {
+        String sql = "SELECT maDonHang, maNguoiDung, maCa, maKhachHang, maGiamGia, tongTien, tienGiam, tienThue, tongCuoi, trangThai, loaiDon, thoiGianTao, maBan FROM donHang WHERE maDonHang = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setString(1, maDH);
+            ps.setInt(1, maDonHang);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    DonHang d = new DonHang();
-                    d.setMaDH(rs.getString("maDH"));
-                    d.setMaBan(rs.getString("maBan"));
-                    d.setNgayTao(rs.getTimestamp("ngayTao"));
-                    d.setTongTien(rs.getLong("tongTien"));
-                    d.setTrangThai(rs.getString("trangThai"));
-                    return d;
+                    return mapRow(rs);
                 }
             }
         } catch (SQLException ex) {
@@ -49,14 +37,29 @@ public class DonHangDAO {
     }
 
     public boolean insert(DonHang d) {
-        String sql = "INSERT INTO DonHang(maDH, maBan, ngayTao, tongTien, trangThai) VALUES(?, ?, ?, ?, ?)";
-        try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setString(1, d.getMaDH());
-            ps.setString(2, d.getMaBan());
-            ps.setTimestamp(3, d.getNgayTao());
-            ps.setLong(4, d.getTongTien());
-            ps.setString(5, d.getTrangThai());
-            return ps.executeUpdate() > 0;
+        String sql = "INSERT INTO donHang(maNguoiDung, maCa, maKhachHang, maGiamGia, tongTien, tienGiam, tienThue, tongCuoi, trangThai, loaiDon, maBan) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            setNullableInt(ps, 1, d.getMaNguoiDung());
+            setNullableInt(ps, 2, d.getMaCa());
+            setNullableInt(ps, 3, d.getMaKhachHang());
+            setNullableInt(ps, 4, d.getMaGiamGia());
+            ps.setBigDecimal(5, d.getTongTien());
+            ps.setBigDecimal(6, d.getTienGiam());
+            ps.setBigDecimal(7, d.getTienThue());
+            ps.setBigDecimal(8, d.getTongCuoi());
+            ps.setString(9, d.getTrangThai());
+            ps.setString(10, d.getLoaiDon());
+            ps.setInt(11, d.getMaBan());
+            int rows = ps.executeUpdate();
+            if (rows > 0) {
+                try (ResultSet keys = ps.getGeneratedKeys()) {
+                    if (keys.next()) {
+                        d.setMaDonHang(keys.getInt(1));
+                    }
+                }
+                return true;
+            }
+            return false;
         } catch (SQLException ex) {
             ex.printStackTrace();
             return false;
@@ -64,13 +67,20 @@ public class DonHangDAO {
     }
 
     public boolean update(DonHang d) {
-        String sql = "UPDATE DonHang SET maBan = ?, ngayTao = ?, tongTien = ?, trangThai = ? WHERE maDH = ?";
+        String sql = "UPDATE donHang SET maNguoiDung = ?, maCa = ?, maKhachHang = ?, maGiamGia = ?, tongTien = ?, tienGiam = ?, tienThue = ?, tongCuoi = ?, trangThai = ?, loaiDon = ?, maBan = ? WHERE maDonHang = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setString(1, d.getMaBan());
-            ps.setTimestamp(2, d.getNgayTao());
-            ps.setLong(3, d.getTongTien());
-            ps.setString(4, d.getTrangThai());
-            ps.setString(5, d.getMaDH());
+            setNullableInt(ps, 1, d.getMaNguoiDung());
+            setNullableInt(ps, 2, d.getMaCa());
+            setNullableInt(ps, 3, d.getMaKhachHang());
+            setNullableInt(ps, 4, d.getMaGiamGia());
+            ps.setBigDecimal(5, d.getTongTien());
+            ps.setBigDecimal(6, d.getTienGiam());
+            ps.setBigDecimal(7, d.getTienThue());
+            ps.setBigDecimal(8, d.getTongCuoi());
+            ps.setString(9, d.getTrangThai());
+            ps.setString(10, d.getLoaiDon());
+            ps.setInt(11, d.getMaBan());
+            ps.setInt(12, d.getMaDonHang());
             return ps.executeUpdate() > 0;
         } catch (SQLException ex) {
             ex.printStackTrace();
@@ -78,14 +88,44 @@ public class DonHangDAO {
         }
     }
 
-    public boolean delete(String maDH) {
-        String sql = "DELETE FROM DonHang WHERE maDH = ?";
+    public boolean delete(int maDonHang) {
+        String sql = "DELETE FROM donHang WHERE maDonHang = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setString(1, maDH);
+            ps.setInt(1, maDonHang);
             return ps.executeUpdate() > 0;
         } catch (SQLException ex) {
             ex.printStackTrace();
             return false;
+        }
+    }
+
+    private DonHang mapRow(ResultSet rs) throws SQLException {
+        DonHang d = new DonHang();
+        d.setMaDonHang(rs.getInt("maDonHang"));
+        int maNguoiDung = rs.getInt("maNguoiDung");
+        d.setMaNguoiDung(rs.wasNull() ? null : maNguoiDung);
+        int maCa = rs.getInt("maCa");
+        d.setMaCa(rs.wasNull() ? null : maCa);
+        int maKhachHang = rs.getInt("maKhachHang");
+        d.setMaKhachHang(rs.wasNull() ? null : maKhachHang);
+        int maGiamGia = rs.getInt("maGiamGia");
+        d.setMaGiamGia(rs.wasNull() ? null : maGiamGia);
+        d.setTongTien(rs.getBigDecimal("tongTien"));
+        d.setTienGiam(rs.getBigDecimal("tienGiam"));
+        d.setTienThue(rs.getBigDecimal("tienThue"));
+        d.setTongCuoi(rs.getBigDecimal("tongCuoi"));
+        d.setTrangThai(rs.getString("trangThai"));
+        d.setLoaiDon(rs.getString("loaiDon"));
+        d.setThoiGianTao(rs.getTimestamp("thoiGianTao"));
+        d.setMaBan(rs.getInt("maBan"));
+        return d;
+    }
+
+    private void setNullableInt(PreparedStatement ps, int index, Integer value) throws SQLException {
+        if (value != null) {
+            ps.setInt(index, value);
+        } else {
+            ps.setNull(index, Types.INTEGER);
         }
     }
 }

@@ -148,7 +148,7 @@ public class TableLayoutPanel extends JPanel {
                     TrangThaiBanDAO dao = new TrangThaiBanDAO();
                     TrangThaiBan tt = new TrangThaiBan();
                     // persist using integer table id
-                    tt.setMaBan(String.valueOf(t.maBan));
+                    tt.setMaBan(t.maBan);
                     tt.setTrangThai(newStatus);
                     // include UI-level soNguoi in persistence
                     tt.setSoNguoi(t.getSoNguoi());
@@ -181,7 +181,7 @@ public class TableLayoutPanel extends JPanel {
                 try {
                     TrangThaiBanDAO dao = new TrangThaiBanDAO();
                     TrangThaiBan tt = new TrangThaiBan();
-                    tt.setMaBan(String.valueOf(t.maBan));
+                    tt.setMaBan(t.maBan);
                     tt.setTrangThai(t.status);
                     tt.setSoNguoi(soNguoi);
                     boolean ok = dao.update(tt);
@@ -231,40 +231,23 @@ public class TableLayoutPanel extends JPanel {
         public void mergeStatuses(List<entity.TrangThaiBan> states) {
             if (states == null) return;
             for (entity.TrangThaiBan s : states) {
-                if (s == null || s.getMaBan() == null) continue;
-                try {
-                    String mb = s.getMaBan();
-                    int id = Integer.parseInt(mb);
-                    CafeTable ct = findTableById(id);
-                    if (ct != null) {
-                        String old = ct.status;
-                        ct.status = s.getTrangThai() != null ? s.getTrangThai() : ct.status;
-                        ct.setSoNguoi(s.getSoNguoi());
-                        ct.maDonHang = s.getMaDonHang();
-                        ct.capNhatCuoi = s.getCapNhatCuoi();
-                        final CafeTable notifyTable = ct;
-                        SwingUtilities.invokeLater(() -> {
-                            for (TableModelListener l : new ArrayList<>(listeners)) {
-                                try { l.tableStatusChanged(notifyTable, old, notifyTable.status); } catch (Exception ex) { ex.printStackTrace(); }
-                            }
-                        });
-                    }
-                } catch (NumberFormatException ex) {
-                    // Fallback: attempt to match by label for legacy DB rows like "T1 | P8" or "T1"
-                    CafeTable ct = findTableByLabel(s.getMaBan());
-                    if (ct != null) {
-                        String old = ct.status;
-                        ct.status = s.getTrangThai() != null ? s.getTrangThai() : ct.status;
-                        ct.setSoNguoi(s.getSoNguoi());
-                        ct.maDonHang = s.getMaDonHang();
-                        ct.capNhatCuoi = s.getCapNhatCuoi();
-                        final CafeTable notifyTable = ct;
-                        SwingUtilities.invokeLater(() -> {
-                            for (TableModelListener l : new ArrayList<>(listeners)) {
-                                try { l.tableStatusChanged(notifyTable, old, notifyTable.status); } catch (Exception ex2) { ex2.printStackTrace(); }
-                            }
-                        });
-                    }
+                if (s == null) continue;
+                int maBan = s.getMaBan();
+                if (maBan <= 0) continue;
+                CafeTable ct = findTableById(maBan);
+                if (ct != null) {
+                    String old = ct.status;
+                    ct.status = s.getTrangThai() != null ? s.getTrangThai() : ct.status;
+                    ct.setSoNguoi(s.getSoNguoi());
+                    Integer maDonHang = s.getMaDonHang();
+                    ct.maDonHang = maDonHang != null ? String.valueOf(maDonHang) : null;
+                    ct.capNhatCuoi = s.getCapNhatCuoi();
+                    final CafeTable notifyTable = ct;
+                    SwingUtilities.invokeLater(() -> {
+                        for (TableModelListener l : new ArrayList<>(listeners)) {
+                            try { l.tableStatusChanged(notifyTable, old, notifyTable.status); } catch (Exception ex) { ex.printStackTrace(); }
+                        }
+                    });
                 }
             }
         }
@@ -626,10 +609,8 @@ public class TableLayoutPanel extends JPanel {
                     g2.drawRect(t.x, t.y, t.size, t.size);
                 }
 
-                // Draw label centered; include soNguoi if set (format: "<base> | P<soNguoi>")
-                String base = t.name.replaceFirst(" \\| P\\d+$", "");
-                String label = base;
-                if (t.getSoNguoi() != null) label = base + " | P" + t.getSoNguoi();
+                // Draw label centered; include soNguoi if set (format: "T <maBan> | P<soNguoi>")
+                String label = buildTableLabel(t);
 
                 g2.setColor(Color.WHITE);
                 Font font = getFont().deriveFont(Font.BOLD, 14f);
@@ -699,6 +680,23 @@ public class TableLayoutPanel extends JPanel {
     // Optional: expose tables for tests or external manipulation
     public List<CafeTable> getTables() {
         return tableModel.getTables();
+    }
+
+    private String buildTableLabel(CafeTable t) {
+        if (t == null) return "";
+        if (t.isTakeaway) {
+            return t.name != null ? t.name : "Takeaway";
+        }
+        StringBuilder sb = new StringBuilder();
+        if (t.maBan > 0) {
+            sb.append("T ").append(t.maBan);
+        } else if (t.name != null) {
+            sb.append(t.name);
+        }
+        if (t.getSoNguoi() != null) {
+            sb.append(" | P").append(t.getSoNguoi());
+        }
+        return sb.toString();
     }
 
     // Build the default layout for this instance (creates a fresh copy)
