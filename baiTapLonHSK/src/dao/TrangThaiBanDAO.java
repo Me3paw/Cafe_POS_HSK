@@ -4,8 +4,10 @@ import connectDB.DBConnection;
 import entity.TrangThaiBan;
 
 import java.sql.*;
+import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public class TrangThaiBanDAO {
     public List<TrangThaiBan> layHet() {
@@ -41,7 +43,7 @@ public class TrangThaiBanDAO {
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, t.getMaBan());
             setNullableInt(ps, 2, t.getMaDonHang());
-            ps.setString(3, t.getTrangThai());
+            ps.setString(3, toDbStatus(t.getTrangThai()));
             setNullableInt(ps, 4, t.getSoNguoi());
             if (t.getCapNhatCuoi() != null) ps.setTimestamp(5, t.getCapNhatCuoi());
             else ps.setTimestamp(5, new Timestamp(System.currentTimeMillis()));
@@ -56,7 +58,7 @@ public class TrangThaiBanDAO {
         String sql = "UPDATE trangThaiBan SET maDonHang = ?, trangThai = ?, soNguoi = ?, capNhatCuoi = ? WHERE maBan = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             setNullableInt(ps, 1, t.getMaDonHang());
-            ps.setString(2, t.getTrangThai());
+            ps.setString(2, toDbStatus(t.getTrangThai()));
             setNullableInt(ps, 3, t.getSoNguoi());
             ps.setTimestamp(4, new Timestamp(System.currentTimeMillis()));
             ps.setInt(5, t.getMaBan());
@@ -86,13 +88,14 @@ public class TrangThaiBanDAO {
         }
 
         // Table is empty: insert rows for integer maBan values (>0)
-        String insertSql = "INSERT INTO trangThaiBan(maBan, maDonHang, trangThai, soNguoi, capNhatCuoi) VALUES(?, NULL, 'Trống', NULL, NOW())";
+        String insertSql = "INSERT INTO trangThaiBan(maBan, maDonHang, trangThai, soNguoi, capNhatCuoi) VALUES(?, NULL, ?, NULL, NOW())";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(insertSql)) {
             for (components.GiaoDienKhuVucBan.CafeTable t : tables) {
                 if (t == null) continue;
                 // only use positive integer ids; skip takeaway (maBan==0)
                 if (t.maBan <= 0) continue;
                 ps.setInt(1, t.maBan);
+                ps.setString(2, toDbStatus("Trống"));
                 ps.addBatch();
             }
             ps.executeBatch();
@@ -125,10 +128,62 @@ public class TrangThaiBanDAO {
         t.setMaBan(rs.getInt("maBan"));
         int maDonHang = rs.getInt("maDonHang");
         t.setMaDonHang(rs.wasNull() ? null : maDonHang);
-        t.setTrangThai(rs.getString("trangThai"));
+        t.setTrangThai(fromDbStatus(rs.getString("trangThai")));
         int soNguoi = rs.getInt("soNguoi");
         t.setSoNguoi(rs.wasNull() ? null : soNguoi);
         t.setCapNhatCuoi(rs.getTimestamp("capNhatCuoi"));
         return t;
+    }
+
+    private String toDbStatus(String status) {
+        if (status == null) return null;
+        String trimmed = status.trim();
+        if (trimmed.isEmpty()) return null;
+        String lower = trimmed.toLowerCase(Locale.ROOT);
+        switch (lower) {
+            case "trống":
+            case "trong":
+            case "free":
+            case "available":
+                return "FREE";
+            case "đang sử dụng":
+            case "dang su dung":
+            case "occupied":
+                return "OCCUPIED";
+            case "đặt trước":
+            case "dat truoc":
+            case "reserved":
+                return "RESERVED";
+            case "bảo trì":
+            case "bao tri":
+            case "maintenance":
+                return "MAINTENANCE";
+            case "takeaway":
+            case "mang di":
+                return "TAKEAWAY";
+            default:
+                String normalized = Normalizer.normalize(trimmed, Normalizer.Form.NFD)
+                        .replaceAll("\\p{InCombiningDiacriticalMarks}+", "");
+                if (normalized.length() > 50) normalized = normalized.substring(0, 50);
+                return normalized.toUpperCase(Locale.ROOT);
+        }
+    }
+
+    private String fromDbStatus(String dbStatus) {
+        if (dbStatus == null) return null;
+        switch (dbStatus.toUpperCase(Locale.ROOT)) {
+            case "FREE":
+                return "Trống";
+            case "OCCUPIED":
+                return "Đang sử dụng";
+            case "RESERVED":
+                return "Đặt trước";
+            case "MAINTENANCE":
+                return "Bảo trì";
+            case "TAKEAWAY":
+                return "Takeaway";
+            default:
+                return dbStatus;
+        }
     }
 }
