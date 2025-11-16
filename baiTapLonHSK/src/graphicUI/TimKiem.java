@@ -314,7 +314,11 @@ public class TimKiem extends JPanel {
                 List<KhachHang> customers = khachHangDAO.layHet();
                 allCustomers.clear();
                 if (customers != null) {
-                    allCustomers.addAll(customers);
+                    for (KhachHang kh : customers) {
+                        if (isValidCustomer(kh)) {
+                            allCustomers.add(kh);
+                        }
+                    }
                 }
             } catch (Exception ex) {
                 ex.printStackTrace();
@@ -336,6 +340,17 @@ public class TimKiem extends JPanel {
                 }
             }
             refreshTable(filtered);
+        }
+
+        private boolean isValidCustomer(KhachHang kh) {
+            if (kh == null) {
+                return false;
+            }
+            if (kh.getMaKhachHang() <= 0) {
+                return false;
+            }
+            String name = kh.getHoTen();
+            return name == null || !name.trim().equalsIgnoreCase("khách lẻ");
         }
 
         private void refreshTable(List<KhachHang> source) {
