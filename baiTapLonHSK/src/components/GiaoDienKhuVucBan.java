@@ -1,14 +1,17 @@
 package components;
 
 import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
 import java.text.NumberFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Supplier;
 
 import dao.DonHangDAO;
 import dao.BanDAO;
@@ -24,6 +27,8 @@ public class GiaoDienKhuVucBan extends JPanel {
         THANHTOAN_MODE // new mode for selecting a table for checkout without auto-occupying
     }
 
+    public static final int TAKEAWAY_TABLE_ID = 15;
+
     private Mode mode;
 
     private boolean autoOccupyOnOrder = true; // default true to preserve existing behavior
@@ -35,12 +40,18 @@ public class GiaoDienKhuVucBan extends JPanel {
 
     private final java.util.List<TableSelectionListener> selectionListeners = new ArrayList<>();
 
+    private Supplier<JPanel> takeawayOrderPanelSupplier;
+
     public void addTableSelectionListener(TableSelectionListener l) {
         if (l != null) selectionListeners.add(l);
     }
 
     public void removeTableSelectionListener(TableSelectionListener l) {
         selectionListeners.remove(l);
+    }
+
+    public void setTakeawayOrderPanelSupplier(Supplier<JPanel> supplier) {
+        this.takeawayOrderPanelSupplier = supplier;
     }
 
     // Nested CafeTable class represents a single table on the floor
@@ -348,7 +359,9 @@ public class GiaoDienKhuVucBan extends JPanel {
                             showStatusChangeDialog(t);
                         } else if (mode == Mode.DATBAN_MODE) {
                             // ORDER_MODE behavior: select table for creating/updating order
-                            if (autoOccupyOnOrder) {
+                            if (t.isTakeaway) {
+                                notifySelectionListeners(t);
+                            } else if (autoOccupyOnOrder) {
                                 setTableInUse(t);
                             } else {
                                 notifySelectionListeners(t);
@@ -413,7 +426,8 @@ public class GiaoDienKhuVucBan extends JPanel {
                         );
 
                         if (choice != null) {
-                            if ("OCCUPIED".equalsIgnoreCase(choice)) {
+                            String dbStatus = vietnameseToDbStatus(choice);
+                            if ("OCCUPIED".equalsIgnoreCase(dbStatus)) {
                                 // ask for number of people; if cancelled, abort status change
                                 InputResult res = promptForSoNguoiSimple();
                                 if (res.cancelled) {
@@ -421,10 +435,10 @@ public class GiaoDienKhuVucBan extends JPanel {
                                     return;
                                 }
                                 table.setSoNguoi(res.value);
-                                tableModel.setStatus(table, choice);
+                                tableModel.setStatus(table, dbStatus);
                             } else {
                                 // other statuses: allow changing status without forcing people input
-                                tableModel.setStatus(table, choice);
+                                tableModel.setStatus(table, dbStatus);
                             }
                         }
                     }
@@ -444,17 +458,18 @@ public class GiaoDienKhuVucBan extends JPanel {
                 );
 
                 if (choice != null) {
-                    if ("OCCUPIED".equalsIgnoreCase(choice)) {
+                    String dbStatus = vietnameseToDbStatus(choice);
+                    if ("OCCUPIED".equalsIgnoreCase(dbStatus)) {
                         // when user marks Occupied, prompt for number; cancel means abort
                         InputResult res = promptForSoNguoiSimple();
                         if (res.cancelled) {
                             return; // no change
                         }
                         table.setSoNguoi(res.value);
-                        tableModel.setStatus(table, choice);
+                        tableModel.setStatus(table, dbStatus);
                     } else {
                         // changing to non-Occupied: keep soNguoi as-is (user can update via new menu action)
-                        tableModel.setStatus(table, choice);
+                        tableModel.setStatus(table, dbStatus);
                     }
                 }
             }
@@ -514,7 +529,7 @@ public class GiaoDienKhuVucBan extends JPanel {
     public boolean beginTransferFrom(String tableLabel) {
         CafeTable src = tableModel.findTableByLabel(tableLabel);
         if (src == null) return false;
-        if (src.isTakeaway || "Bảo trì".equalsIgnoreCase(src.status)) {
+        if (src.isTakeaway || "MAINTENANCE".equalsIgnoreCase(src.status)) {
             JOptionPane.showMessageDialog(this, "Không thể chuyển từ bàn này.", "Lỗi", JOptionPane.ERROR_MESSAGE);
             return false;
         }
@@ -528,62 +543,121 @@ public class GiaoDienKhuVucBan extends JPanel {
     }
 
     private void showTakeawayOrdersDialog() {
-        java.util.List<DonHang> takeaways;
+        DefaultTableModel tableModel = new DefaultTableModel(new Object[]{"Mã đơn", "Tổng cuối", "Trạng thái", "Thời gian"}, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) { return false; }
+        };
+
+        JTable ordersTable = new JTable(tableModel);
+        ordersTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        ordersTable.setFillsViewportHeight(true);
+
+        JLabel statusLabel = new JLabel();
+
+        Runnable refresher = () -> {
+            java.util.List<DonHang> openOrders = fetchOpenTakeawayOrders();
+            tableModel.setRowCount(0);
+            NumberFormat currencyFmt = NumberFormat.getNumberInstance(new Locale("vi", "VN"));
+            currencyFmt.setMaximumFractionDigits(0);
+            SimpleDateFormat df = new SimpleDateFormat("dd/MM HH:mm");
+            for (DonHang d : openOrders) {
+                String amount = d.getTongCuoi() != null ? currencyFmt.format(d.getTongCuoi()) + " đ" : "";
+                String time = d.getThoiGianTao() != null ? df.format(d.getThoiGianTao()) : "";
+                tableModel.addRow(new Object[]{d.getMaDonHang(), amount, d.getTrangThai(), time});
+            }
+            if (openOrders.isEmpty()) {
+                statusLabel.setText("Chưa có đơn mang đi đang mở.");
+            } else {
+                statusLabel.setText("Có " + openOrders.size() + " đơn mang đi đang mở.");
+            }
+        };
+
+        refresher.run();
+
+        JScrollPane scrollPane = new JScrollPane(ordersTable);
+        scrollPane.setPreferredSize(new Dimension(420, 220));
+
+        JButton refreshBtn = new JButton("Tải lại");
+        refreshBtn.addActionListener(e -> refresher.run());
+
+        JButton addBtn = new JButton("Thêm món");
+        if (takeawayOrderPanelSupplier == null) {
+            addBtn.setEnabled(false);
+        }
+        addBtn.addActionListener(e -> openTakeawayOrderPanel(refresher));
+
+        JPanel footer = new JPanel(new BorderLayout());
+        footer.add(statusLabel, BorderLayout.CENTER);
+        JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        actions.add(refreshBtn);
+        actions.add(addBtn);
+        footer.add(actions, BorderLayout.EAST);
+
+        JPanel content = new JPanel(new BorderLayout(8, 8));
+        content.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        content.add(scrollPane, BorderLayout.CENTER);
+        content.add(footer, BorderLayout.SOUTH);
+
+        Window owner = SwingUtilities.getWindowAncestor(this);
+        JDialog dialog = owner instanceof Dialog
+                ? new JDialog((Dialog) owner, "Đơn mang đi", Dialog.ModalityType.APPLICATION_MODAL)
+                : new JDialog((Frame) owner, "Đơn mang đi", true);
+        dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+        dialog.getContentPane().add(content);
+        dialog.pack();
+        dialog.setLocationRelativeTo(owner);
+        dialog.setVisible(true);
+    }
+
+    private java.util.List<DonHang> fetchOpenTakeawayOrders() {
         try {
             DonHangDAO dao = new DonHangDAO();
-            takeaways = dao.layTheoLoaiDon("TAKEAWAY");
+            java.util.List<DonHang> byTable = dao.layTheoBan(TAKEAWAY_TABLE_ID);
+            if (byTable == null) return List.of();
+            java.util.List<DonHang> open = new ArrayList<>();
+            for (DonHang d : byTable) {
+                if (d != null && "dangMo".equalsIgnoreCase(d.getTrangThai())) {
+                    open.add(d);
+                }
+            }
+            return open;
         } catch (Exception ex) {
             ex.printStackTrace();
-            JOptionPane.showMessageDialog(this, "Không thể tải danh sách đơn Takeaway từ cơ sở dữ liệu.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Không thể tải danh sách đơn mang đi từ cơ sở dữ liệu.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            return List.of();
+        }
+    }
+
+    private void openTakeawayOrderPanel(Runnable afterClose) {
+        if (takeawayOrderPanelSupplier == null) {
+            JOptionPane.showMessageDialog(this, "Không thể mở giao diện thêm món vì chưa cấu hình.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        JPanel orderPanel;
+        try {
+            orderPanel = takeawayOrderPanelSupplier.get();
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Lỗi khi tạo giao diện thêm món.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        if (orderPanel == null) {
+            JOptionPane.showMessageDialog(this, "Không thể mở giao diện thêm món.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
             return;
         }
 
-        if (takeaways == null || takeaways.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Chưa có đơn Takeaway nào.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
+        Window owner = SwingUtilities.getWindowAncestor(this);
+        JDialog addDialog = owner instanceof Dialog
+                ? new JDialog((Dialog) owner, "Thêm đơn mang đi", Dialog.ModalityType.APPLICATION_MODAL)
+                : new JDialog((Frame) owner, "Thêm đơn mang đi", true);
+        addDialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+        addDialog.getContentPane().add(orderPanel, BorderLayout.CENTER);
+        addDialog.pack();
+        addDialog.setLocationRelativeTo(owner);
+        addDialog.setVisible(true);
 
-        DefaultListModel<DonHang> model = new DefaultListModel<>();
-        for (DonHang d : takeaways) {
-            model.addElement(d);
-        }
-
-        final NumberFormat currencyFmt = NumberFormat.getNumberInstance(new Locale("vi", "VN"));
-        currencyFmt.setMaximumFractionDigits(0);
-
-        JList<DonHang> list = new JList<>(model);
-        list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        list.setCellRenderer(new DefaultListCellRenderer() {
-            @Override
-            public Component getListCellRendererComponent(JList<?> jList, Object value, int index, boolean isSelected, boolean cellHasFocus) {
-                Component comp = super.getListCellRendererComponent(jList, value, index, isSelected, cellHasFocus);
-                if (value instanceof DonHang) {
-                    DonHang d = (DonHang) value;
-                    StringBuilder sb = new StringBuilder();
-                    sb.append("ĐH #").append(d.getMaDonHang());
-                    if (d.getTongCuoi() != null) {
-                        sb.append(" - ").append(currencyFmt.format(d.getTongCuoi())).append(" đ");
-                    }
-                    if (d.getTrangThai() != null) {
-                        sb.append(" - ").append(d.getTrangThai());
-                    }
-                    setText(sb.toString());
-                }
-                return comp;
-            }
-        });
-
-        JScrollPane sp = new JScrollPane(list);
-        sp.setPreferredSize(new Dimension(360, 180));
-        int ans = JOptionPane.showConfirmDialog(this, sp, "Danh sách đơn Takeaway", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
-        if (ans == JOptionPane.OK_OPTION) {
-            DonHang sel = list.getSelectedValue();
-            if (sel != null) {
-                JOptionPane.showMessageDialog(this,
-                        "Đơn hàng #" + sel.getMaDonHang() + " - Trạng thái: " + (sel.getTrangThai() != null ? sel.getTrangThai() : "Không rõ"),
-                        "Chi tiết đơn",
-                        JOptionPane.INFORMATION_MESSAGE);
-            }
+        if (afterClose != null) {
+            afterClose.run();
         }
     }
 
@@ -604,7 +678,7 @@ public class GiaoDienKhuVucBan extends JPanel {
     // Programmatically occupy a table (useful when selection requires confirmation outside the panel)
     public void occupyTable(CafeTable table) {
         if (table != null) {
-            tableModel.setStatus(table, "Đang sử dụng");
+            tableModel.setStatus(table, "OCCUPIED");
             notifySelectionListeners(table);
         }
     }
@@ -737,7 +811,7 @@ public class GiaoDienKhuVucBan extends JPanel {
     private String buildTableLabel(CafeTable t) {
         if (t == null) return "";
         if (t.isTakeaway) {
-            return t.name != null ? t.name : "Takeaway";
+            return t.name != null ? t.name : "Mang đi";
         }
         StringBuilder sb = new StringBuilder();
         if (t.maBan > 0) {
@@ -782,7 +856,7 @@ public class GiaoDienKhuVucBan extends JPanel {
             case "MAINTENANCE":
                 return "Bảo trì";
             case "TAKEAWAY":
-                return "Takeaway";
+                return "Mang đi";
             default:
                 return dbStatus;
         }
@@ -840,10 +914,10 @@ public class GiaoDienKhuVucBan extends JPanel {
                 def.add(new CafeTable(num, "T" + num + " | P8", x, y, circSize, true));
             }
 
-            // === BOTTOM ROW: 5 rectangular tables ===
+            // === BOTTOM ROW: 4 rectangular tables ===
             int botY = midY + circSize + gapY;
 
-            for (int i = 0; i < 5; i++) {
+            for (int i = 0; i < 4; i++) {
                 int num = 11 + i;
                 int x = startX + i * (rectW + gapX);
                 def.add(new CafeTable(num, "T" + num + " | P8", x, botY, rectW, false));
@@ -855,7 +929,7 @@ public class GiaoDienKhuVucBan extends JPanel {
             int twX = startX + 5 * (rectW + gapX) + 20;
             int twY = startY;
 
-            CafeTable takeaway = new CafeTable(0, "TW", twX, twY, twW, false);
+            CafeTable takeaway = new CafeTable(TAKEAWAY_TABLE_ID, "Mang đi", twX, twY, twW, false);
             takeaway.isTakeaway = true;
             takeaway.status = "TAKEAWAY";
             def.add(takeaway);
