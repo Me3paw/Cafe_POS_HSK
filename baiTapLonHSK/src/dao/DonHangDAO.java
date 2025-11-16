@@ -3,6 +3,7 @@ package dao;
 import connectDB.DBConnection;
 import entity.DonHang;
 
+import java.math.BigDecimal;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -76,12 +77,12 @@ public class DonHangDAO {
             setNullableInt(ps, 3, d.getMaKhachHang());
             setNullableInt(ps, 4, d.getMaGiamGia());
             ps.setBigDecimal(5, d.getTongTien());
-            ps.setBigDecimal(6, d.getTienGiam());
-            ps.setBigDecimal(7, d.getTienThue());
+            ps.setBigDecimal(6, nonNullCurrency(d.getTienGiam()));
+            ps.setBigDecimal(7, nonNullCurrency(d.getTienThue()));
             ps.setBigDecimal(8, d.getTongCuoi());
             ps.setString(9, d.getTrangThai());
             ps.setString(10, d.getLoaiDon());
-            setNullableInt(ps, 11, d.getMaBan());
+            ps.setInt(11, requireMaBan(d.getMaBan()));
             int rows = ps.executeUpdate();
             if (rows > 0) {
                 try (ResultSet keys = ps.getGeneratedKeys()) {
@@ -106,12 +107,12 @@ public class DonHangDAO {
             setNullableInt(ps, 3, d.getMaKhachHang());
             setNullableInt(ps, 4, d.getMaGiamGia());
             ps.setBigDecimal(5, d.getTongTien());
-            ps.setBigDecimal(6, d.getTienGiam());
-            ps.setBigDecimal(7, d.getTienThue());
+            ps.setBigDecimal(6, nonNullCurrency(d.getTienGiam()));
+            ps.setBigDecimal(7, nonNullCurrency(d.getTienThue()));
             ps.setBigDecimal(8, d.getTongCuoi());
             ps.setString(9, d.getTrangThai());
             ps.setString(10, d.getLoaiDon());
-            setNullableInt(ps, 11, d.getMaBan());
+            ps.setInt(11, requireMaBan(d.getMaBan()));
             ps.setInt(12, d.getMaDonHang());
             return ps.executeUpdate() > 0;
         } catch (SQLException ex) {
@@ -143,14 +144,13 @@ public class DonHangDAO {
         int maGiamGia = rs.getInt("maGiamGia");
         d.setMaGiamGia(rs.wasNull() ? null : maGiamGia);
         d.setTongTien(rs.getBigDecimal("tongTien"));
-        d.setTienGiam(rs.getBigDecimal("tienGiam"));
-        d.setTienThue(rs.getBigDecimal("tienThue"));
+        d.setTienGiam(nonNullCurrency(rs.getBigDecimal("tienGiam")));
+        d.setTienThue(nonNullCurrency(rs.getBigDecimal("tienThue")));
         d.setTongCuoi(rs.getBigDecimal("tongCuoi"));
         d.setTrangThai(rs.getString("trangThai"));
         d.setLoaiDon(rs.getString("loaiDon"));
         d.setThoiGianTao(rs.getTimestamp("thoiGianTao"));
-        int maBan = rs.getInt("maBan");
-        d.setMaBan(rs.wasNull() ? null : maBan);
+        d.setMaBan(rs.getInt("maBan"));
         return d;
     }
 
@@ -160,5 +160,16 @@ public class DonHangDAO {
         } else {
             ps.setNull(index, Types.INTEGER);
         }
+    }
+
+    private int requireMaBan(Integer maBan) {
+        if (maBan == null) {
+            throw new IllegalArgumentException("maBan is NOT NULL according to cafe_pos.donHang schema");
+        }
+        return maBan;
+    }
+
+    private BigDecimal nonNullCurrency(BigDecimal value) {
+        return value != null ? value : BigDecimal.ZERO;
     }
 }
