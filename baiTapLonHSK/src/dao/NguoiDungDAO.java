@@ -26,6 +26,26 @@ public class NguoiDungDAO {
         return res;
     }
 
+    public NguoiDung layTheoTenDangNhap(String tenDangNhap) {
+        String sql = "SELECT maNguoiDung, tenDangNhap, hoTen, vaiTro, matKhau, ngayTao FROM nguoiDung WHERE tenDangNhap = ?";
+        try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, tenDangNhap);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    NguoiDung n = new NguoiDung();
+                    n.setMaNguoiDung(rs.getInt("maNguoiDung"));
+                    n.setTenDangNhap(rs.getString("tenDangNhap"));
+                    n.setHoTen(rs.getString("hoTen"));
+                    n.setVaiTro(rs.getString("vaiTro"));
+                    n.setMatKhau(rs.getString("matKhau"));
+                    n.setNgayTao(rs.getTimestamp("ngayTao"));
+                    return n;
+                }
+            }
+        } catch (SQLException ex) { ex.printStackTrace(); }
+        return null;
+    }
+
     public NguoiDung layTheoId(int maNguoiDung) {
         String sql = "SELECT maNguoiDung, tenDangNhap, hoTen, vaiTro, matKhau, ngayTao FROM nguoiDung WHERE maNguoiDung = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
@@ -74,6 +94,24 @@ public class NguoiDungDAO {
             ps.setString(3, n.getVaiTro());
             ps.setString(4, n.getMatKhau());
             ps.setInt(5, n.getMaNguoiDung());
+            return ps.executeUpdate() > 0;
+        } catch (SQLException ex) { ex.printStackTrace(); return false; }
+    }
+
+    public boolean capNhatMatKhau(int maNguoiDung, String matKhauMoi) {
+        String sql = "UPDATE nguoiDung SET matKhau = ? WHERE maNguoiDung = ?";
+        try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, matKhauMoi);
+            ps.setInt(2, maNguoiDung);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException ex) { ex.printStackTrace(); return false; }
+    }
+
+    public boolean capNhatVaiTro(int maNguoiDung, String vaiTro) {
+        String sql = "UPDATE nguoiDung SET vaiTro = ? WHERE maNguoiDung = ?";
+        try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, vaiTro);
+            ps.setInt(2, maNguoiDung);
             return ps.executeUpdate() > 0;
         } catch (SQLException ex) { ex.printStackTrace(); return false; }
     }

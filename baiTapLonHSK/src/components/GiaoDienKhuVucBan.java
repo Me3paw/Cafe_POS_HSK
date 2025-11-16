@@ -6,6 +6,7 @@ import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
+import java.text.Normalizer;
 import java.text.NumberFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -356,7 +357,7 @@ public class GiaoDienKhuVucBan extends JPanel {
                         // No pending move - behave according to current mode
                         if (mode == Mode.TRANGTHAI_MODE) {
                             // STATUS_MODE is used for modal interactions (including initiating transfers).
-                            showStatusChangeDialog(t);
+                            showTableActionDialog(t);
                         } else if (mode == Mode.DATBAN_MODE) {
                             // ORDER_MODE behavior: select table for creating/updating order
                             if (t.isTakeaway) {
@@ -376,13 +377,38 @@ public class GiaoDienKhuVucBan extends JPanel {
                 }
             }
 
-            private void showStatusChangeDialog(CafeTable table) {
+            private void showTableActionDialog(CafeTable table) {
                 // If the clicked tile is the takeaway slot, show the takeaway orders list
                 if (table.isTakeaway) {
                     showTakeawayOrdersDialog();
                     return;
                 }
 
+                String[] quickOptions = new String[]{"Đổi số người", "Thêm món", "Đổi trạng thái", "Hủy"};
+                int choice = JOptionPane.showOptionDialog(
+                        GiaoDienKhuVucBan.this,
+                        "Chọn thao tác cho " + table.name + ":",
+                        "Tùy chọn bàn",
+                        JOptionPane.DEFAULT_OPTION,
+                        JOptionPane.QUESTION_MESSAGE,
+                        null,
+                        quickOptions,
+                        quickOptions[0]
+                );
+
+                if (choice == 0) {
+                    InputResult res = promptForSoNguoiSimple();
+                    if (!res.cancelled) {
+                        tableModel.updateSoNguoi(table, res.value);
+                    }
+                } else if (choice == 1) {
+                    handleAddItemsForTable(table);
+                } else if (choice == 2) {
+                    showStatusManagementDialog(table);
+                }
+            }
+
+            private void showStatusManagementDialog(CafeTable table) {
                 // If occupied table, offer actions: update order, change table, change status, update people
                 if ("OCCUPIED".equalsIgnoreCase(table.status)) {
                     String[] occupiedOptions = new String[]{"Cập nhật đơn", "Cập nhật số người", "Chuyển bàn", "Đổi trạng thái", "Hủy"};
@@ -400,9 +426,7 @@ public class GiaoDienKhuVucBan extends JPanel {
                         JOptionPane.showMessageDialog(GiaoDienKhuVucBan.this, "Mở cập nhật đơn cho " + table.name + " (placeholder)", "Cập nhật đơn", JOptionPane.INFORMATION_MESSAGE);
                     } else if (opt == 1) { // cập nhật số người
                         InputResult res = promptForSoNguoiSimple();
-                        if (res.cancelled) {
-                            // no change
-                        } else {
+                        if (!res.cancelled) {
                             // update via model so persistence + listeners
                             tableModel.updateSoNguoi(table, res.value);
                         }
@@ -415,7 +439,7 @@ public class GiaoDienKhuVucBan extends JPanel {
                         JOptionPane.showMessageDialog(GiaoDienKhuVucBan.this, "Chọn bàn đích để chuyển đơn từ " + table.name + ". (Bấm vào bàn đích)", "Chuyển bàn", JOptionPane.INFORMATION_MESSAGE);
                     } else if (opt == 3) { // đổi trạng thái
                         String[] statusOptions = new String[]{"FREE", "OCCUPIED", "RESERVED", "MAINTENANCE"};
-                        String choice = (String) JOptionPane.showInputDialog(
+                        String statusChoice = (String) JOptionPane.showInputDialog(
                                 GiaoDienKhuVucBan.this,
                                 "Chọn trạng thái:",
                                 "Bàn: " + table.name,
@@ -425,8 +449,8 @@ public class GiaoDienKhuVucBan extends JPanel {
                                 table.status
                         );
 
-                        if (choice != null) {
-                            String dbStatus = vietnameseToDbStatus(choice);
+                        if (statusChoice != null) {
+                            String dbStatus = vietnameseToDbStatus(statusChoice);
                             if ("OCCUPIED".equalsIgnoreCase(dbStatus)) {
                                 // ask for number of people; if cancelled, abort status change
                                 InputResult res = promptForSoNguoiSimple();
@@ -472,6 +496,30 @@ public class GiaoDienKhuVucBan extends JPanel {
                         tableModel.setStatus(table, dbStatus);
                     }
                 }
+            }
+
+            private void handleAddItemsForTable(CafeTable table) {
+                if (table == null) {
+                    return;
+                }
+                if (table.maBan <= 0) {
+                    JOptionPane.showMessageDialog(GiaoDienKhuVucBan.this,
+                            "Bàn này chưa được gắn với mã bàn trong hệ thống.",
+                            "Thông báo",
+                            JOptionPane.INFORMATION_MESSAGE);
+                    return;
+                }
+
+                Integer maDon = GiaoDienKhuVucBan.this.findOpenOrderIdForTable(table);
+                if (maDon == null) {
+                    JOptionPane.showMessageDialog(GiaoDienKhuVucBan.this,
+                            "Không tìm thấy hóa đơn đang mở cho " + table.name + ".",
+                            "Thông báo",
+                            JOptionPane.INFORMATION_MESSAGE);
+                    return;
+                }
+
+                GiaoDienKhuVucBan.this.openExistingOrderPanel(maDon, "Thêm món cho " + table.name, null);
             }
 
             private InputResult promptForSoNguoiSimple() {
@@ -584,7 +632,33 @@ public class GiaoDienKhuVucBan extends JPanel {
         if (takeawayOrderPanelSupplier == null) {
             addBtn.setEnabled(false);
         }
-        addBtn.addActionListener(e -> openTakeawayOrderPanel(refresher));
+        addBtn.addActionListener(e -> {
+            int selectedRow = ordersTable.getSelectedRow();
+            if (selectedRow == -1) {
+                JOptionPane.showMessageDialog(GiaoDienKhuVucBan.this,
+                        "Vui lòng chọn một đơn để thêm món.",
+                        "Thông báo",
+                        JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+            Object val = tableModel.getValueAt(selectedRow, 0);
+            if (val == null) {
+                JOptionPane.showMessageDialog(GiaoDienKhuVucBan.this,
+                        "Không xác định được mã đơn hàng.",
+                        "Lỗi",
+                        JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            try {
+                int maDonHang = Integer.parseInt(val.toString());
+                openTakeawayOrderPanel(maDonHang, refresher);
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(GiaoDienKhuVucBan.this,
+                        "Giá trị mã đơn hàng không hợp lệ.",
+                        "Lỗi",
+                        JOptionPane.ERROR_MESSAGE);
+            }
+        });
 
         JPanel footer = new JPanel(new BorderLayout());
         footer.add(statusLabel, BorderLayout.CENTER);
@@ -628,7 +702,11 @@ public class GiaoDienKhuVucBan extends JPanel {
         }
     }
 
-    private void openTakeawayOrderPanel(Runnable afterClose) {
+    private void openTakeawayOrderPanel(int maDonHang, Runnable afterClose) {
+        openExistingOrderPanel(maDonHang, "Thêm đơn mang đi", afterClose);
+    }
+
+    private void openExistingOrderPanel(int maDonHang, String dialogTitle, Runnable afterClose) {
         if (takeawayOrderPanelSupplier == null) {
             JOptionPane.showMessageDialog(this, "Không thể mở giao diện thêm món vì chưa cấu hình.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
             return;
@@ -647,10 +725,19 @@ public class GiaoDienKhuVucBan extends JPanel {
         }
 
         Window owner = SwingUtilities.getWindowAncestor(this);
+        String title = dialogTitle != null ? dialogTitle : "Thêm món";
         JDialog addDialog = owner instanceof Dialog
-                ? new JDialog((Dialog) owner, "Thêm đơn mang đi", Dialog.ModalityType.APPLICATION_MODAL)
-                : new JDialog((Frame) owner, "Thêm đơn mang đi", true);
+                ? new JDialog((Dialog) owner, title, Dialog.ModalityType.APPLICATION_MODAL)
+                : new JDialog((Frame) owner, title, true);
         addDialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+        if (orderPanel instanceof OrderPanelBridge) {
+            ((OrderPanelBridge) orderPanel).configureForExistingOrder(maDonHang, addDialog::dispose);
+        } else {
+            JOptionPane.showMessageDialog(addDialog,
+                    "Giao diện thêm món không hỗ trợ chế độ thêm vào đơn có sẵn.",
+                    "Lỗi",
+                    JOptionPane.ERROR_MESSAGE);
+        }
         addDialog.getContentPane().add(orderPanel, BorderLayout.CENTER);
         addDialog.pack();
         addDialog.setLocationRelativeTo(owner);
@@ -659,6 +746,48 @@ public class GiaoDienKhuVucBan extends JPanel {
         if (afterClose != null) {
             afterClose.run();
         }
+    }
+
+    private Integer findOpenOrderIdForTable(CafeTable table) {
+        if (table == null || table.maBan <= 0) {
+            return null;
+        }
+        try {
+            DonHangDAO dao = new DonHangDAO();
+            java.util.List<DonHang> orders = dao.layTheoBan(table.maBan);
+            if (orders == null || orders.isEmpty()) {
+                return null;
+            }
+            for (DonHang order : orders) {
+                if (order != null && !isPaidOrder(order)) {
+                    return order.getMaDonHang();
+                }
+            }
+            for (DonHang order : orders) {
+                if (order != null) {
+                    return order.getMaDonHang();
+                }
+            }
+            return null;
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(this,
+                    "Không thể xác định hóa đơn của " + table.name + ".",
+                    "Lỗi",
+                    JOptionPane.ERROR_MESSAGE);
+            return null;
+        }
+    }
+
+    private boolean isPaidOrder(DonHang order) {
+        if (order == null || order.getTrangThai() == null) return false;
+        String status = order.getTrangThai().replaceAll("\\s+", "");
+        String normalized = Normalizer.normalize(status, Normalizer.Form.NFD)
+                .replaceAll("\\p{InCombiningDiacriticalMarks}+", "")
+                .toUpperCase(Locale.ROOT);
+        return normalized.contains("PAID")
+                || normalized.contains("THANHTOAN")
+                || normalized.contains("HOANTAT");
     }
 
     private void notifySelectionListeners(CafeTable table) {

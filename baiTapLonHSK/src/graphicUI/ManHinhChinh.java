@@ -7,6 +7,7 @@ import java.awt.event.ActionEvent;
 import components.GiaoDienKhuVucBan;
 import dao.BanDAO;
 import entity.Ban;
+import entity.NguoiDung;
 import java.util.List;
 
 /**
@@ -126,7 +127,15 @@ public class ManHinhChinh extends JFrame {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
         } catch (Exception ignored) {}
         SwingUtilities.invokeLater(() -> {
+            DangNhapDialog loginDialog = new DangNhapDialog(null);
+            NguoiDung user = loginDialog.showDialog();
+            if (user == null) {
+                System.exit(0);
+                return;
+            }
+            SessionContext.setCurrentUser(user);
             ManHinhChinh f = new ManHinhChinh();
+            f.setTitle("Café POS - " + user.getHoTen() + " (" + user.getVaiTro() + ")");
             f.setVisible(true);
         });
     }
