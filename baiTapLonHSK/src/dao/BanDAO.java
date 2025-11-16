@@ -1,7 +1,7 @@
 package dao;
 
 import connectDB.DBConnection;
-import entity.TrangThaiBan;
+import entity.Ban;
 
 import java.sql.*;
 import java.text.Normalizer;
@@ -9,10 +9,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-public class TrangThaiBanDAO {
-    public List<TrangThaiBan> layHet() {
-        List<TrangThaiBan> res = new ArrayList<>();
-        String sql = "SELECT maBan, maDonHang, trangThai, soNguoi, capNhatCuoi FROM trangThaiBan";
+public class BanDAO {
+    public List<Ban> layHet() {
+        List<Ban> res = new ArrayList<>();
+        String sql = "SELECT maBan, maDonHang, trangThai, soNguoi, capNhatCuoi FROM ban";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
                 res.add(mapRow(rs));
@@ -23,8 +23,8 @@ public class TrangThaiBanDAO {
         return res;
     }
 
-    public TrangThaiBan layTheoId(int maBan) {
-        String sql = "SELECT maBan, maDonHang, trangThai, soNguoi, capNhatCuoi FROM trangThaiBan WHERE maBan = ?";
+    public Ban layTheoId(int maBan) {
+        String sql = "SELECT maBan, maDonHang, trangThai, soNguoi, capNhatCuoi FROM ban WHERE maBan = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, maBan);
             try (ResultSet rs = ps.executeQuery()) {
@@ -38,8 +38,8 @@ public class TrangThaiBanDAO {
         return null;
     }
 
-    public boolean them(TrangThaiBan t) {
-        String sql = "INSERT INTO trangThaiBan(maBan, maDonHang, trangThai, soNguoi, capNhatCuoi) VALUES(?, ?, ?, ?, ?)";
+    public boolean them(Ban t) {
+        String sql = "INSERT INTO ban(maban, maDonHang, trangThai, soNguoi, capNhatCuoi) VALUES(?, ?, ?, ?, ?)";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, t.getMaBan());
             setNullableInt(ps, 2, t.getMaDonHang());
@@ -54,8 +54,8 @@ public class TrangThaiBanDAO {
         }
     }
 
-    public boolean capNhat(TrangThaiBan t) {
-        String sql = "UPDATE trangThaiBan SET maDonHang = ?, trangThai = ?, soNguoi = ?, capNhatCuoi = ? WHERE maBan = ?";
+    public boolean capNhat(Ban t) {
+        String sql = "UPDATE ban SET maDonHang = ?, trangThai = ?, soNguoi = ?, capNhatCuoi = ? WHERE maBan = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             setNullableInt(ps, 1, t.getMaDonHang());
             ps.setString(2, toDbStatus(t.getTrangThai()));
@@ -70,13 +70,13 @@ public class TrangThaiBanDAO {
     }
 
     /**
-     * Initialize the trangThaiBan table from a list of CafeTable definitions.
+     * Initialize the Ban table from a list of CafeTable definitions.
      * Behavior: if the table already contains rows, do nothing. If empty, insert one row per CafeTable
      * using the integer maBan of the CafeTable. maDonHang = NULL, trangThai = 'TRONG', soNguoi = NULL, capNhatCuoi = NOW().
      */
     public void khoiTao(List<components.GiaoDienKhuVucBan.CafeTable> tables) {
         if (tables == null || tables.isEmpty()) return;
-        String countSql = "SELECT COUNT(*) FROM trangThaiBan";
+        String countSql = "SELECT COUNT(*) FROM ban";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(countSql); ResultSet rs = ps.executeQuery()) {
             if (rs.next()) {
                 int cnt = rs.getInt(1);
@@ -88,7 +88,7 @@ public class TrangThaiBanDAO {
         }
 
         // Table is empty: insert rows for integer maBan values (>0)
-        String insertSql = "INSERT INTO trangThaiBan(maBan, maDonHang, trangThai, soNguoi, capNhatCuoi) VALUES(?, NULL, ?, NULL, NOW())";
+        String insertSql = "INSERT INTO ban(maBan, maDonHang, trangThai, soNguoi, capNhatCuoi) VALUES(?, NULL, ?, NULL, NOW())";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(insertSql)) {
             for (components.GiaoDienKhuVucBan.CafeTable t : tables) {
                 if (t == null) continue;
@@ -105,7 +105,7 @@ public class TrangThaiBanDAO {
     }
 
     public boolean delete(int maBan) {
-        String sql = "DELETE FROM trangThaiBan WHERE maBan = ?";
+        String sql = "DELETE FROM ban WHERE maBan = ?";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, maBan);
             return ps.executeUpdate() > 0;
@@ -123,8 +123,8 @@ public class TrangThaiBanDAO {
         }
     }
 
-    private TrangThaiBan mapRow(ResultSet rs) throws SQLException {
-        TrangThaiBan t = new TrangThaiBan();
+    private Ban mapRow(ResultSet rs) throws SQLException {
+        Ban t = new Ban();
         t.setMaBan(rs.getInt("maBan"));
         int maDonHang = rs.getInt("maDonHang");
         t.setMaDonHang(rs.wasNull() ? null : maDonHang);

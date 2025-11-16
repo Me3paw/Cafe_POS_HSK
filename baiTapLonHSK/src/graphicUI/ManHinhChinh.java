@@ -5,8 +5,8 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 
 import components.GiaoDienKhuVucBan;
-import dao.TrangThaiBanDAO;
-import entity.TrangThaiBan;
+import dao.BanDAO;
+import entity.Ban;
 import java.util.List;
 
 /**
@@ -88,10 +88,10 @@ public class ManHinhChinh extends JFrame {
 
     private void mergeTableStatusesFromDB() {
         try {
-            TrangThaiBanDAO dao = new TrangThaiBanDAO();
+            BanDAO dao = new BanDAO();
             // Ensure DB has rows for our default layout when empty
             dao.khoiTao(sharedTableModel.getTables());
-            List<TrangThaiBan> list = dao.layHet();
+            List<Ban> list = dao.layHet();
             if (list != null) {
                 // mergeStatuses expects integer maBan values in the DB rows
                 sharedTableModel.mergeStatuses(list);

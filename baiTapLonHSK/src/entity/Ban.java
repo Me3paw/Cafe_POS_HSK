@@ -2,16 +2,16 @@ package entity;
 
 import java.sql.Timestamp;
 
-public class TrangThaiBan {
+public class Ban {
     private int maBan;
     private Integer maDonHang;
     private String trangThai;
     private Integer soNguoi;
     private Timestamp capNhatCuoi;
 
-    public TrangThaiBan() {}
+    public Ban() {}
 
-    public TrangThaiBan(int maBan, String trangThai) {
+    public Ban(int maBan, String trangThai) {
         this.maBan = maBan;
         this.trangThai = trangThai;
     }

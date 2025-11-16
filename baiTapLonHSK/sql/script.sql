@@ -140,7 +140,7 @@ CREATE TABLE thanhToan (
 -- ==========================
 -- BẢNG trangThaiBan
 -- ==========================
-CREATE TABLE trangThaiBan (
+CREATE TABLE ban (
     maBan INT PRIMARY KEY,
     maDonHang INT,
     trangThai VARCHAR(50),
@@ -166,3 +166,8 @@ CREATE TABLE tonKho (
     mucCanhBao DECIMAL(10,2),
     capNhatCuoi DATETIME
 );
+ALTER TABLE tonKho
+    CHANGE COLUMN maNguyenLieu maTon INT NOT NULL AUTO_INCREMENT,
+    DROP COLUMN tenNguyenLieu,
+    ADD COLUMN maMon INT NOT NULL UNIQUE AFTER maTon,
+    ADD CONSTRAINT fk_tonkho_mon FOREIGN KEY (maMon) REFERENCES mon(maMon);

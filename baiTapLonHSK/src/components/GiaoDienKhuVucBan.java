@@ -11,9 +11,9 @@ import java.util.List;
 import java.util.Locale;
 
 import dao.DonHangDAO;
-import dao.TrangThaiBanDAO;
+import dao.BanDAO;
 import entity.DonHang;
-import entity.TrangThaiBan;
+import entity.Ban;
 
 import java.sql.*;
 
@@ -139,8 +139,8 @@ public class GiaoDienKhuVucBan extends JPanel {
             // Persist to DB (best-effort) on a background thread so UI isn't blocked
             new Thread(() -> {
                 try {
-                    TrangThaiBanDAO dao = new TrangThaiBanDAO();
-                    TrangThaiBan tt = new TrangThaiBan();
+                    BanDAO dao = new BanDAO();
+                    Ban tt = new Ban();
                     // persist using integer table id
                     tt.setMaBan(t.maBan);
                     tt.setTrangThai(newStatus);
@@ -173,8 +173,8 @@ public class GiaoDienKhuVucBan extends JPanel {
 
             new Thread(() -> {
                 try {
-                    TrangThaiBanDAO dao = new TrangThaiBanDAO();
-                    TrangThaiBan tt = new TrangThaiBan();
+                    BanDAO dao = new BanDAO();
+                    Ban tt = new Ban();
                     tt.setMaBan(t.maBan);
                     tt.setTrangThai(t.status);
                     tt.setSoNguoi(soNguoi);
@@ -222,9 +222,9 @@ public class GiaoDienKhuVucBan extends JPanel {
          * Merge a list of DB states into the model. For each DB state, find matching
          * CafeTable by integer maBan and replace only status-related fields (trangThai, soNguoi, maDonHang, capNhatCuoi).
          */
-        public void mergeStatuses(List<entity.TrangThaiBan> states) {
+        public void mergeStatuses(List<entity.Ban> states) {
             if (states == null) return;
-            for (entity.TrangThaiBan s : states) {
+            for (entity.Ban s : states) {
                 if (s == null) continue;
                 int maBan = s.getMaBan();
                 if (maBan <= 0) continue;
