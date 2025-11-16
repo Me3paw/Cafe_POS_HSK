@@ -52,7 +52,7 @@ public class GiaoDienKhuVucBan extends JPanel {
         // optional order id and last update timestamp from DB
         public String maDonHang;
         public java.sql.Timestamp capNhatCuoi;
-        public String status = "Trống"; // Free / Occupied / Reserved / Under maintenance / Takeaway
+        public String status = "FREE"; // FREE / OCCUPIED / RESERVED / MAINTENANCE / TAKEAWAY (database ENUM values)
         public boolean isCircle;
         public boolean isTakeaway = false; // true for the takeaway slot
 
@@ -285,6 +285,9 @@ public class GiaoDienKhuVucBan extends JPanel {
         // increase preferred size so takeaway fits
         setPreferredSize(new Dimension(520, 380));
 
+        // Load table status from database on initialization
+        loadTableStatusFromDB();
+
         // register to repaint when model changes
         this.tableModel.addListener((table, oldS, newS) -> {
             repaint();
@@ -302,6 +305,7 @@ public class GiaoDienKhuVucBan extends JPanel {
             private void handleClick(int mx, int my) {
                 for (CafeTable t : tableModel.getTables()) {
                     if (t.contains(mx, my)) {
+                    	
                         // If there is a pending move source, always treat this click as a destination
                         // selection for the transfer flow, regardless of the current mode. This
                         // prevents the status dialog from showing when the user is in the middle
@@ -312,7 +316,7 @@ public class GiaoDienKhuVucBan extends JPanel {
                                 JOptionPane.showMessageDialog(GiaoDienKhuVucBan.this, "Chọn bàn đích khác.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
                                 return;
                             }
-                            if (t.isTakeaway || "Bảo trì".equalsIgnoreCase(t.status)) {
+                            if (t.isTakeaway || "MAINTENANCE".equalsIgnoreCase(t.status)) {
                                 JOptionPane.showMessageDialog(GiaoDienKhuVucBan.this, "Không thể chuyển đến bàn này (Takeaway hoặc đang bảo trì).", "Lỗi", JOptionPane.ERROR_MESSAGE);
                                 return;
                             }
@@ -321,8 +325,8 @@ public class GiaoDienKhuVucBan extends JPanel {
                                     "Xác nhận chuyển bàn",
                                     JOptionPane.YES_NO_OPTION);
                             if (ans == JOptionPane.YES_OPTION) {
-                                tableModel.setStatus(t, "Đang sử dụng");
-                                tableModel.setStatus(pendingMoveSource, "Trống");
+                                tableModel.setStatus(t, "OCCUPIED");
+                                tableModel.setStatus(pendingMoveSource, "FREE");
                                 notifySelectionListeners(t);
                                 pendingMoveSource = null;
                                 setCursor(Cursor.getDefaultCursor());
@@ -367,7 +371,7 @@ public class GiaoDienKhuVucBan extends JPanel {
                 }
 
                 // If occupied table, offer actions: update order, change table, change status, update people
-                if ("Đang sử dụng".equalsIgnoreCase(table.status)) {
+                if ("OCCUPIED".equalsIgnoreCase(table.status)) {
                     String[] occupiedOptions = new String[]{"Cập nhật đơn", "Cập nhật số người", "Chuyển bàn", "Đổi trạng thái", "Hủy"};
                     int opt = JOptionPane.showOptionDialog(
                             GiaoDienKhuVucBan.this,
@@ -397,7 +401,7 @@ public class GiaoDienKhuVucBan extends JPanel {
                         setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
                         JOptionPane.showMessageDialog(GiaoDienKhuVucBan.this, "Chọn bàn đích để chuyển đơn từ " + table.name + ". (Bấm vào bàn đích)", "Chuyển bàn", JOptionPane.INFORMATION_MESSAGE);
                     } else if (opt == 3) { // đổi trạng thái
-                        String[] statusOptions = new String[]{"Trống", "Đang sử dụng", "Đặt trước", "Bảo trì"};
+                        String[] statusOptions = new String[]{"FREE", "OCCUPIED", "RESERVED", "MAINTENANCE"};
                         String choice = (String) JOptionPane.showInputDialog(
                                 GiaoDienKhuVucBan.this,
                                 "Chọn trạng thái:",
@@ -409,7 +413,7 @@ public class GiaoDienKhuVucBan extends JPanel {
                         );
 
                         if (choice != null) {
-                            if ("Đang sử dụng".equalsIgnoreCase(choice)) {
+                            if ("OCCUPIED".equalsIgnoreCase(choice)) {
                                 // ask for number of people; if cancelled, abort status change
                                 InputResult res = promptForSoNguoiSimple();
                                 if (res.cancelled) {
@@ -428,7 +432,7 @@ public class GiaoDienKhuVucBan extends JPanel {
                 }
 
                 // Otherwise allow changing status between Free / Occupied / Reserved / Under maintenance
-                String[] options = {"Trống", "Đang sử dụng", "Đặt trước", "Bảo trì"};
+                String[] options = {"FREE", "OCCUPIED", "RESERVED", "MAINTENANCE"};
                 String choice = (String) JOptionPane.showInputDialog(
                         GiaoDienKhuVucBan.this,
                         "Chọn trạng thái:",
@@ -440,7 +444,7 @@ public class GiaoDienKhuVucBan extends JPanel {
                 );
 
                 if (choice != null) {
-                    if ("Đang sử dụng".equalsIgnoreCase(choice)) {
+                    if ("OCCUPIED".equalsIgnoreCase(choice)) {
                         // when user marks Occupied, prompt for number; cancel means abort
                         InputResult res = promptForSoNguoiSimple();
                         if (res.cancelled) {
@@ -481,7 +485,7 @@ public class GiaoDienKhuVucBan extends JPanel {
                 InputResult res = promptForSoNguoiSimple();
                 if (res.cancelled) return; // user cancelled -> do not occupy
                 table.setSoNguoi(res.value);
-                tableModel.setStatus(table, "Đang sử dụng");
+                tableModel.setStatus(table, "OCCUPIED");
                 System.out.println("Selected table for order: " + table.name);
                 notifySelectionListeners(table);
             }
@@ -617,7 +621,10 @@ public class GiaoDienKhuVucBan extends JPanel {
             // draw each table with color based on status
             for (CafeTable t : tableModel.getTables()) {
                 Color fill;
-                switch (t.status) {
+                // Check status - internally stored as English enums but convert to Vietnamese for display logic
+                String displayStatus = dbStatusToVietnamese(t.status);
+                
+                switch (displayStatus) {
                     case "Đang sử dụng":
                         fill = Color.RED;
                         break;
@@ -675,7 +682,7 @@ public class GiaoDienKhuVucBan extends JPanel {
                 // highlight hovered table if valid
                 if (hoverTable != null && hoverTable != pendingMoveSource) {
                     // invalid destinations: takeaway or under maintenance
-                    boolean invalid = hoverTable.isTakeaway || "Bảo trì".equalsIgnoreCase(hoverTable.status);
+                    boolean invalid = hoverTable.isTakeaway || "MAINTENANCE".equalsIgnoreCase(hoverTable.status);
                     if (!invalid) {
                         g2.setColor(new Color(40, 180, 60));
                     } else {
@@ -722,6 +729,11 @@ public class GiaoDienKhuVucBan extends JPanel {
         return tableModel.getTables();
     }
 
+    // Public getter for tableModel to allow refresh operations
+    public TableModel getTableModel() {
+        return tableModel;
+    }
+
     private String buildTableLabel(CafeTable t) {
         if (t == null) return "";
         if (t.isTakeaway) {
@@ -745,67 +757,110 @@ public class GiaoDienKhuVucBan extends JPanel {
         return new ArrayList<>(copyDefaultLayout());
     }
 
-    // Provide a static copy of the default layout so other panels (e.g. checkout view)
-    // can use the same table names/positions without sharing the same objects.
-    public static List<CafeTable> copyDefaultLayout() {
-        List<CafeTable> def = new ArrayList<>();
-
-        int startX = 30;      // minor adjustments for nicer visual centering
-        int startY = 30;
-        int gapX = 25;
-        int gapY = 50;
-
-        // === TOP ROW: 5 rectangular tables ===
-        int rectW = 90;
-        int rectH = 60;
-
-        for (int i = 0; i < 5; i++) {
-            int num = 1 + i;
-            int x = startX + i * (rectW + gapX);
-            int y = startY;
-            def.add(new CafeTable(num, "T" + num + " | P8", x, y, rectW, false));
-        }
-
-        // === MIDDLE: 4 circular tables ===
-        int circSize = 80;
-        int midY = startY + rectH + gapY;
-
-        // fine-tuned offsets to mimic the picture layout (slightly curved)
-        int[] middleXOffsets = {
-                startX + 40,
-                startX + 40 + circSize + 20,
-                startX + 40 + circSize * 2 + 40,
-                startX + 40 + circSize * 3 + 60
-        };
-
-        for (int i = 0; i < 4; i++) {
-            int num = 6 + i;
-            int x = middleXOffsets[i];
-            int y = midY + (i == 1 ? 10 : i == 2 ? -5 : 0); // small vertical curve
-            def.add(new CafeTable(num, "T" + num + " | P8", x, y, circSize, true));
-        }
-
-        // === BOTTOM ROW: 5 rectangular tables ===
-        int botY = midY + circSize + gapY;
-
-        for (int i = 0; i < 5; i++) {
-            int num = 11 + i;
-            int x = startX + i * (rectW + gapX);
-            def.add(new CafeTable(num, "T" + num + " | P8", x, botY, rectW, false));
-        }
-
-        // === TAKEAWAY RECTANGLE on the far right ===
-        int twW = 110;
-        int twH = rectH;
-        int twX = startX + 5 * (rectW + gapX) + 20;
-        int twY = startY;
-
-        CafeTable takeaway = new CafeTable(0, "TW", twX, twY, twW, false);
-        takeaway.isTakeaway = true;
-        takeaway.status = "Takeaway";
-        def.add(takeaway);
-
-        return def;
+    private void loadTableStatusFromDB() {
+        new Thread(() -> {
+            try {
+                BanDAO banDAO = new BanDAO();
+                List<Ban> dbStates = banDAO.layHet();
+                tableModel.mergeStatuses(dbStates);
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+        }).start();
     }
+
+    // Helper: convert DB enum status (FREE/OCCUPIED/etc) to Vietnamese for UI display
+    private String dbStatusToVietnamese(String dbStatus) {
+        if (dbStatus == null) return "Trống";
+        switch (dbStatus.toUpperCase()) {
+            case "FREE":
+                return "Trống";
+            case "OCCUPIED":
+                return "Đang sử dụng";
+            case "RESERVED":
+                return "Đặt trước";
+            case "MAINTENANCE":
+                return "Bảo trì";
+            case "TAKEAWAY":
+                return "Takeaway";
+            default:
+                return dbStatus;
+        }
+    }
+
+    // Helper: convert Vietnamese UI status to DB enum
+    private String vietnameseToDbStatus(String uiStatus) {
+        if (uiStatus == null) return null;
+        String lower = uiStatus.toLowerCase();
+        if (lower.contains("trống") || lower.contains("trong") || lower.contains("free")) return "FREE";
+        if (lower.contains("đang sử dụng") || lower.contains("dang su dung") || lower.contains("occupied")) return "OCCUPIED";
+        if (lower.contains("đặt trước") || lower.contains("dat truoc") || lower.contains("reserved")) return "RESERVED";
+        if (lower.contains("bảo trì") || lower.contains("bao tri") || lower.contains("maintenance")) return "MAINTENANCE";
+        if (lower.contains("takeaway")) return "TAKEAWAY";
+        return uiStatus.toUpperCase();
+    }
+
+        // Provide a static copy of the default layout so other panels (e.g. checkout view)
+        // can use the same table names/positions without sharing the same objects.
+        public static List<CafeTable> copyDefaultLayout() {
+            List<CafeTable> def = new ArrayList<>();
+
+            int startX = 30;      // minor adjustments for nicer visual centering
+            int startY = 30;
+            int gapX = 25;
+            int gapY = 50;
+
+            // === TOP ROW: 5 rectangular tables ===
+            int rectW = 90;
+            int rectH = 60;
+
+            for (int i = 0; i < 5; i++) {
+                int num = 1 + i;
+                int x = startX + i * (rectW + gapX);
+                int y = startY;
+                def.add(new CafeTable(num, "T" + num + " | P8", x, y, rectW, false));
+            }
+
+            // === MIDDLE: 4 circular tables ===
+            int circSize = 80;
+            int midY = startY + rectH + gapY;
+
+            // fine-tuned offsets to mimic the picture layout (slightly curved)
+            int[] middleXOffsets = {
+                    startX + 40,
+                    startX + 40 + circSize + 20,
+                    startX + 40 + circSize * 2 + 40,
+                    startX + 40 + circSize * 3 + 60
+            };
+
+            for (int i = 0; i < 4; i++) {
+                int num = 6 + i;
+                int x = middleXOffsets[i];
+                int y = midY + (i == 1 ? 10 : i == 2 ? -5 : 0); // small vertical curve
+                def.add(new CafeTable(num, "T" + num + " | P8", x, y, circSize, true));
+            }
+
+            // === BOTTOM ROW: 5 rectangular tables ===
+            int botY = midY + circSize + gapY;
+
+            for (int i = 0; i < 5; i++) {
+                int num = 11 + i;
+                int x = startX + i * (rectW + gapX);
+                def.add(new CafeTable(num, "T" + num + " | P8", x, botY, rectW, false));
+            }
+
+            // === TAKEAWAY RECTANGLE on the far right ===
+            int twW = 110;
+            int twH = rectH;
+            int twX = startX + 5 * (rectW + gapX) + 20;
+            int twY = startY;
+
+            CafeTable takeaway = new CafeTable(0, "TW", twX, twY, twW, false);
+            takeaway.isTakeaway = true;
+            takeaway.status = "TAKEAWAY";
+            def.add(takeaway);
+
+            return def;
+        }
 
 }

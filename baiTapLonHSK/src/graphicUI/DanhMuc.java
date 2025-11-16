@@ -3,12 +3,16 @@ package graphicUI;
 import connectDB.DBConnection;
 import dao.DanhMucDAO;
 import dao.MonDAO;
+import dao.TonKhoDAO;
 import entity.Mon;
+import entity.TonKho;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.ActionEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.util.HashMap;
@@ -16,16 +20,20 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * CatalogPanel manages product and combo CRUD forms.
+ * CatalogPanel manages product and inventory (Tồn Kho) CRUD forms.
  */
 public class DanhMuc extends JPanel {
     private JTabbedPane tabs;
+    private ProductCRUDPanel productPanel;
+    private TonKhoPanel tonKhoPanel;
 
     public DanhMuc() {
         setLayout(new BorderLayout());
         tabs = new JTabbedPane();
-        tabs.addTab("Sản phẩm", new ProductCRUDPanel());
-        tabs.addTab("Combo món", new ComboCRUDPanel());
+        productPanel = new ProductCRUDPanel();
+        tonKhoPanel = new TonKhoPanel(productPanel);
+        tabs.addTab("Sản phẩm", productPanel);
+        tabs.addTab("Tồn Kho", tonKhoPanel);
         add(tabs, BorderLayout.CENTER);
     }
 
@@ -45,7 +53,7 @@ public class DanhMuc extends JPanel {
 
         public ProductCRUDPanel() {
             setLayout(new BorderLayout(8,8));
-            model = new DefaultTableModel(new Object[] {"MaMon", "TenMon", "TenDanhMuc", "GiaBan", "ConBan", "MoTa"}, 0) {
+            model = new DefaultTableModel(new Object[] {"Mã món", "Tên", "Danh mục", "Giá bán", "Còn bán", "Mô tả"}, 0) {
                 @Override
                 public boolean isCellEditable(int row, int column) {
                     return false;
@@ -55,14 +63,24 @@ public class DanhMuc extends JPanel {
 
             add(new JScrollPane(table), BorderLayout.CENTER);
             add(buildForm(), BorderLayout.EAST);
-            add(buildButtons(), BorderLayout.SOUTH);
+
+            // When a row is clicked, load it into the form
+            table.addMouseListener(new MouseAdapter() {
+                @Override
+                public void mouseClicked(MouseEvent e) {
+                    int r = table.getSelectedRow();
+                    if (r >= 0) {
+                        loadFromSelectedRow(r);
+                    }
+                }
+            });
 
             loadCategories();
             loadData();
         }
 
         private JPanel buildForm() {
-            JPanel p = new JPanel(new GridLayout(12,1,6,6));
+            JPanel p = new JPanel(new GridLayout(0,1,6,6));
             p.setBorder(BorderFactory.createTitledBorder("Thông tin sản phẩm"));
             txtId = new JTextField(); txtId.setEditable(false);
             txtName = new JTextField();
@@ -77,63 +95,20 @@ public class DanhMuc extends JPanel {
             p.add(new JLabel("Giá:")); p.add(txtPrice);
             p.add(chkConBan);
             p.add(new JLabel("Mô tả:")); p.add(txtMoTa);
-            p.setPreferredSize(new Dimension(320,0));
-            return p;
-        }
 
-        private JPanel buildButtons() {
-            JPanel b = new JPanel();
-            JButton add = new JButton("Thêm");
-            JButton edit = new JButton("Cập nhật");
-            JButton del = new JButton("Xóa");
-            JButton save = new JButton("Lưu");
-            JButton cancel = new JButton("Sửa");
+            // Buttons under the form: Lưu, Xóa, Sửa
+            JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 6));
+            JButton btnSave = new JButton("Lưu");
+            JButton btnDelete = new JButton("Xóa");
+            JButton btnEdit = new JButton("Xóa trắng");
 
-            add.addActionListener((ActionEvent e) -> {
-                clearForm();
-                editing = false;
-                editingRow = -1;
-            });
-            edit.addActionListener((ActionEvent e) -> {
-                int r = table.getSelectedRow();
-                if (r < 0) {
-                    JOptionPane.showMessageDialog(this, "Chọn 1 dòng để sửa.");
-                    return;
-                }
-                editing = true;
-                editingRow = r;
-                txtId.setText(String.valueOf(model.getValueAt(r,0)));
-                txtName.setText(String.valueOf(model.getValueAt(r,1)));
-                String tenDM = String.valueOf(model.getValueAt(r,2));
-                // select danh muc in combo
-                for (int i = 0; i < cboDanhMuc.getItemCount(); i++) {
-                    entity.DanhMuc dm = cboDanhMuc.getItemAt(i);
-                    if (dm != null && dm.getTenDanhMuc().equals(tenDM)) {
-                        cboDanhMuc.setSelectedIndex(i);
-                        break;
-                    }
-                }
-                txtPrice.setText(String.valueOf(model.getValueAt(r,3)));
-                chkConBan.setSelected(Boolean.parseBoolean(String.valueOf(model.getValueAt(r,4))));
-                txtMoTa.setText(String.valueOf(model.getValueAt(r,5)));
-            });
-            del.addActionListener((ActionEvent e) -> {
-                int r = table.getSelectedRow();
-                if (r < 0) { JOptionPane.showMessageDialog(this, "Chọn 1 dòng để xóa."); return; }
-                int maMon = Integer.parseInt(String.valueOf(model.getValueAt(r,0)));
-                boolean ok = monDAO.xoa(maMon);
-                if (ok) {
-                    loadData();
-                } else {
-                    JOptionPane.showMessageDialog(this, "Xóa thất bại.");
-                }
-            });
-            save.addActionListener((ActionEvent e) -> {
+            btnSave.addActionListener((ActionEvent e) -> {
                 String name = txtName.getText().trim();
                 String priceS = txtPrice.getText().trim();
                 entity.DanhMuc sel = (entity.DanhMuc) cboDanhMuc.getSelectedItem();
                 boolean conBan = chkConBan.isSelected();
                 String moTa = txtMoTa.getText().trim();
+
                 if (name.isEmpty()) {
                     JOptionPane.showMessageDialog(this, "Tên là bắt buộc.");
                     return;
@@ -145,6 +120,26 @@ public class DanhMuc extends JPanel {
                     JOptionPane.showMessageDialog(this, "Giá không hợp lệ.");
                     return;
                 }
+                if (price.compareTo(BigDecimal.ZERO) <= 0) {
+                    JOptionPane.showMessageDialog(this, "Giá phải lớn hơn 0.");
+                    return;
+                }
+
+                // Validate price against TonKho giaNhap
+                String maTonS = txtId.getText().trim();
+                if (!maTonS.isEmpty()) {
+                    try {
+                        int maMon = Integer.parseInt(maTonS);
+                        TonKho tk = new TonKhoDAO().layTheoMaMon(maMon);
+                        if (tk != null && tk.getGiaNhap() != null && price.compareTo(tk.getGiaNhap()) <= 0) {
+                            JOptionPane.showMessageDialog(this, "Giá bán phải lớn hơn giá nhập (" + tk.getGiaNhap() + ").");
+                            return;
+                        }
+                    } catch (NumberFormatException ex) {
+                        // Not a valid number yet, let DAO handle validation
+                    }
+                }
+
                 Mon m = new Mon();
                 if (sel != null) m.setMaDanhMuc(sel.getMaDanhMuc());
                 m.setTenMon(name);
@@ -153,14 +148,22 @@ public class DanhMuc extends JPanel {
                 m.setMoTa(moTa);
 
                 boolean ok;
-                if (editing && editingRow >= 0) {
+                // If an ID is present and exists in DB, update. Otherwise create new.
+                String idS = txtId.getText().trim();
+                if (!idS.isEmpty()) {
                     try {
-                        m.setMaMon(Integer.parseInt(txtId.getText()));
+                        int ma = Integer.parseInt(idS);
+                        if (monDAO.kiemTraMa(ma)) {
+                            m.setMaMon(ma);
+                            ok = monDAO.capNhat(m);
+                        } else {
+                            // id provided but not found -> create new (ignore id)
+                            ok = monDAO.them(m);
+                        }
                     } catch (NumberFormatException ex) {
                         JOptionPane.showMessageDialog(this, "Id không hợp lệ.");
                         return;
                     }
-                    ok = monDAO.capNhat(m);
                 } else {
                     ok = monDAO.them(m);
                 }
@@ -173,14 +176,57 @@ public class DanhMuc extends JPanel {
                     JOptionPane.showMessageDialog(this, "Lưu thất bại.");
                 }
             });
-            cancel.addActionListener((ActionEvent e) -> {
+
+            btnDelete.addActionListener((ActionEvent e) -> {
+                String idS = txtId.getText().trim();
+                if (idS.isEmpty()) {
+                    // try table selection
+                    int r = table.getSelectedRow();
+                    if (r < 0) { JOptionPane.showMessageDialog(this, "Chọn 1 dòng hoặc điền Mã để xóa."); return; }
+                    idS = String.valueOf(model.getValueAt(r,0));
+                }
+                int maMon;
+                try { maMon = Integer.parseInt(idS); } catch (NumberFormatException ex) { JOptionPane.showMessageDialog(this, "Mã không hợp lệ."); return; }
+                boolean ok = monDAO.xoa(maMon);
+                if (ok) {
+                    loadData();
+                    clearForm();
+                    editing = false;
+                    editingRow = -1;
+                } else {
+                    JOptionPane.showMessageDialog(this, "Xóa thất bại.");
+                }
+            });
+
+            // Xóa trắng: clear all fields in the form
+            btnEdit.addActionListener((ActionEvent e) -> {
                 clearForm();
                 editing = false;
                 editingRow = -1;
             });
 
-            b.add(add); b.add(edit); b.add(del); b.add(save); b.add(cancel);
-            return b;
+            btnPanel.add(btnSave); btnPanel.add(btnDelete); btnPanel.add(btnEdit);
+            p.add(btnPanel);
+
+            p.setPreferredSize(new Dimension(320,0));
+            return p;
+        }
+
+        private void loadFromSelectedRow(int r) {
+            txtId.setText(String.valueOf(model.getValueAt(r,0)));
+            txtName.setText(String.valueOf(model.getValueAt(r,1)));
+            String tenDM = String.valueOf(model.getValueAt(r,2));
+            // select danh muc in combo
+            for (int i = 0; i < cboDanhMuc.getItemCount(); i++) {
+                entity.DanhMuc dm = cboDanhMuc.getItemAt(i);
+                if (dm != null && dm.getTenDanhMuc().equals(tenDM)) {
+                    cboDanhMuc.setSelectedIndex(i);
+                    break;
+                }
+            }
+            txtPrice.setText(String.valueOf(model.getValueAt(r,3)));
+            chkConBan.setSelected(Boolean.parseBoolean(String.valueOf(model.getValueAt(r,4))));
+            txtMoTa.setText(String.valueOf(model.getValueAt(r,5)));
         }
 
         private void clearForm() {
@@ -222,27 +268,127 @@ public class DanhMuc extends JPanel {
                 }
             }
         }
+
+        public void refreshData() {
+            loadData();
+        }
     }
 
-    // Combo CRUD inner class (placeholder)
-    static class ComboCRUDPanel extends JPanel {
+    // TonKho panel - list and simple edit of donVi, soLuong, giaNhap
+    static class TonKhoPanel extends JPanel {
         private DefaultTableModel model;
         private JTable table;
+        private JTextField txtMaTon, txtMon, txtDonVi, txtSoLuong, txtGiaNhap, txtMucCanhBao, txtCapNhat;
+        private TonKhoDAO tonKhoDAO = new TonKhoDAO();
+        private MonDAO monDAO = new MonDAO();
+        private ProductCRUDPanel productCRUDPanel;
 
-        public ComboCRUDPanel() {
+        public TonKhoPanel(ProductCRUDPanel productCRUDPanel) {
+            this.productCRUDPanel = productCRUDPanel;
             setLayout(new BorderLayout(8,8));
-            model = new DefaultTableModel(new Object[] {"ID", "Tên combo", "Giá"}, 0);
+            model = new DefaultTableModel(new Object[] {"Mã Tồn", "Mã Món", "Tên món", "Đơn vị", "Số lượng", "Giá nhập", "Mức cảnh báo", "Cập nhật"}, 0) {
+                @Override
+                public boolean isCellEditable(int row, int column) { return false; }
+            };
             table = new JTable(model);
-            model.addRow(new Object[] {"C001","Combo 1","65000"});
             add(new JScrollPane(table), BorderLayout.CENTER);
 
-            JPanel buttons = new JPanel();
-            buttons.add(new JButton("Add"));
-            buttons.add(new JButton("Edit"));
-            buttons.add(new JButton("Delete"));
-            buttons.add(new JButton("Save"));
-            buttons.add(new JButton("Cancel"));
-            add(buttons, BorderLayout.SOUTH);
+            // form to edit selected record
+            JPanel form = new JPanel(new GridLayout(0,1,6,6));
+            form.setBorder(BorderFactory.createTitledBorder("Chỉnh sửa tồn kho"));
+            txtMaTon = new JTextField(); txtMaTon.setEditable(false);
+            txtMon = new JTextField(); txtMon.setEditable(false);
+            txtDonVi = new JTextField();
+            txtSoLuong = new JTextField();
+            txtGiaNhap = new JTextField();
+            txtMucCanhBao = new JTextField(); txtMucCanhBao.setEditable(false);
+            txtCapNhat = new JTextField(); txtCapNhat.setEditable(false);
+
+            form.add(new JLabel("Mã tồn:")); form.add(txtMaTon);
+            form.add(new JLabel("Mã món / Tên:")); form.add(txtMon);
+            form.add(new JLabel("Đơn vị:")); form.add(txtDonVi);
+            form.add(new JLabel("Số lượng:")); form.add(txtSoLuong);
+            form.add(new JLabel("Giá nhập:")); form.add(txtGiaNhap);
+            form.add(new JLabel("Mức cảnh báo:")); form.add(txtMucCanhBao);
+            form.add(new JLabel("Cập nhật cuối:")); form.add(txtCapNhat);
+
+            JPanel btns = new JPanel(new FlowLayout(FlowLayout.CENTER,6,6));
+            JButton btnSave = new JButton("Lưu");
+            JButton btnRefresh = new JButton("Tải lại");
+            btns.add(btnSave); btns.add(btnRefresh);
+            form.add(btns);
+            form.setPreferredSize(new Dimension(360,0));
+            add(form, BorderLayout.EAST);
+
+            table.addMouseListener(new MouseAdapter() {
+                @Override
+                public void mouseClicked(MouseEvent e) {
+                    int r = table.getSelectedRow();
+                    if (r >= 0) loadFromRow(r);
+                }
+            });
+
+            btnRefresh.addActionListener((ActionEvent e) -> loadData());
+
+            btnSave.addActionListener((ActionEvent e) -> {
+                String maTonS = txtMaTon.getText().trim();
+                if (maTonS.isEmpty()) { JOptionPane.showMessageDialog(this, "Chọn 1 bản ghi để lưu."); return; }
+                int maTon;
+                try { maTon = Integer.parseInt(maTonS); } catch (NumberFormatException ex) { JOptionPane.showMessageDialog(this, "Mã tồn không hợp lệ."); return; }
+                TonKho t = tonKhoDAO.layTheoMaMon(Integer.parseInt(String.valueOf(model.getValueAt(table.getSelectedRow(),1))));
+                if (t == null) { JOptionPane.showMessageDialog(this, "Bản ghi tồn kho không còn tồn tại."); loadData(); return; }
+                // parse and set fields
+                t.setDonVi(txtDonVi.getText().trim());
+                try { t.setSoLuong(new BigDecimal(txtSoLuong.getText().trim())); } catch (Exception ex) { JOptionPane.showMessageDialog(this, "Số lượng không hợp lệ."); return; }
+                try { t.setGiaNhap(new BigDecimal(txtGiaNhap.getText().trim())); } catch (Exception ex) { JOptionPane.showMessageDialog(this, "Giá nhập không hợp lệ."); return; }
+
+                boolean ok = tonKhoDAO.capNhat(t);
+                if (ok) { 
+                    JOptionPane.showMessageDialog(this, "Lưu thành công."); 
+                    loadData();
+                    // Refresh the Product CRUD panel to show updated conBan status
+                    if (productCRUDPanel != null) {
+                        productCRUDPanel.refreshData();
+                    }
+                } else { 
+                    JOptionPane.showMessageDialog(this, "Lưu thất bại."); 
+                }
+            });
+
+            loadData();
+        }
+
+        private void loadFromRow(int r) {
+            txtMaTon.setText(String.valueOf(model.getValueAt(r,0)));
+            txtMon.setText(String.valueOf(model.getValueAt(r,1)) + " / " + String.valueOf(model.getValueAt(r,2)));
+            txtDonVi.setText(String.valueOf(model.getValueAt(r,3)));
+            txtSoLuong.setText(String.valueOf(model.getValueAt(r,4)));
+            txtGiaNhap.setText(String.valueOf(model.getValueAt(r,5)));
+            txtMucCanhBao.setText(String.valueOf(model.getValueAt(r,6)));
+            txtCapNhat.setText(String.valueOf(model.getValueAt(r,7)));
+        }
+
+        private void loadData() {
+            model.setRowCount(0);
+            List<TonKho> ds = tonKhoDAO.layHet();
+            Map<Integer, String> monNames = new HashMap<>();
+            List<Mon> mons = monDAO.layHet();
+            if (mons != null) for (Mon m : mons) monNames.put(m.getMaMon(), m.getTenMon());
+            if (ds != null) {
+                for (TonKho t : ds) {
+                    String ten = monNames.getOrDefault(t.getMaMon(), "");
+                    model.addRow(new Object[] {
+                            t.getMaTon(),
+                            t.getMaMon(),
+                            ten,
+                            t.getDonVi(),
+                            t.getSoLuong(),
+                            t.getGiaNhap(),
+                            t.getMucCanhBao(),
+                            t.getCapNhatCuoi()
+                    });
+                }
+            }
         }
     }
 }

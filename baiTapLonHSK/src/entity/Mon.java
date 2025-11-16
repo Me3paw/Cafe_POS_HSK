@@ -1,6 +1,8 @@
 package entity;
 
 import java.math.BigDecimal;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 
 public class Mon {
     private int maMon;
@@ -29,4 +31,25 @@ public class Mon {
 
     public String getMoTa() { return moTa; }
     public void setMoTa(String moTa) { this.moTa = moTa; }
+
+    // Helper: compute a simple MD5 hash of key fields (tenMon|giaBan|maDanhMuc|conBan|moTa)
+    public String computeHash() {
+        try {
+            String base = (tenMon == null ? "" : tenMon) + "|" +
+                    (giaBan == null ? "" : giaBan.toPlainString()) + "|" +
+                    (maDanhMuc == null ? "" : maDanhMuc.toString()) + "|" +
+                    (conBan ? "1" : "0") + "|" +
+                    (moTa == null ? "" : moTa);
+            MessageDigest md = MessageDigest.getInstance("MD5");
+            byte[] digest = md.digest(base.getBytes());
+            StringBuilder sb = new StringBuilder();
+            for (byte b : digest) {
+                sb.append(String.format("%02x", b & 0xff));
+            }
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            // should not happen; fallback to simple string
+            return String.valueOf((tenMon + "|" + giaBan + "|" + maDanhMuc + "|" + conBan + "|" + moTa).hashCode());
+        }
+    }
 }

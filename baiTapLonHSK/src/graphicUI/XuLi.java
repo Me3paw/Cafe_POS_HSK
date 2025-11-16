@@ -5,12 +5,8 @@ import javax.swing.table.DefaultTableModel;
 
 import components.GiaoDienKhuVucBan;
 import components.GiaoDienKhuVucBan.CafeTable;
-import dao.ChiTietDonHangDAO;
-import dao.DonHangDAO;
-import dao.KhachHangDAO;
-import entity.ChiTietDonHang;
-import entity.DonHang;
-import entity.KhachHang;
+import dao.*;
+import entity.*;
 
 import java.awt.*;
 import java.io.File;
@@ -40,9 +36,7 @@ public class XuLi extends JPanel {
         tabs = new JTabbedPane();
         paymentPanel = new PaymentPanel(tableModel);
         tabs.addTab("Thanh toán", paymentPanel);
-        tabs.addTab("In hóa đơn", new PrintPanel());
         tabs.addTab("Hoàn tiền", buildRefundTab()); // protected
-        tabs.addTab("Chuyển bàn / Hủy đơn", new TransferCancelPanel());
         add(tabs, BorderLayout.CENTER);
     }
 
@@ -89,16 +83,22 @@ public class XuLi extends JPanel {
         private final DonHangDAO donHangDAO = new DonHangDAO();
         private final ChiTietDonHangDAO chiTietDonHangDAO = new ChiTietDonHangDAO();
         private final KhachHangDAO khachHangDAO = new KhachHangDAO();
+        private final BanDAO banDAO = new BanDAO();
+        private final GiamGiaDAO giamGiaDAO = new GiamGiaDAO();
         private final List<DonHang> currentOrders = new ArrayList<>();
         private volatile Integer pendingCustomerId = null;
         private final DecimalFormat currencyFormat;
+        private DonHang currentLoadedOrder = null;
+     // Prevent recursive or programmatic selection events
+        private boolean isProgrammaticSelection = false;
+
 
         public PaymentPanel(GiaoDienKhuVucBan.TableModel sharedModel) {
             setLayout(new BorderLayout(12, 12));
             setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
             setBackground(new Color(250, 250, 255));
             customerIdField.setEditable(false);
-            discountField.setEditable(false);
+            discountField.setEditable(true);
             taxField.setEditable(false);
             totalField.setEditable(false);
 
@@ -108,7 +108,7 @@ public class XuLi extends JPanel {
             currencyFormat = new DecimalFormat("#,##0.##", symbols);
 
             // ===== LEFT: orders list (top) and table layout (bottom) =====
-            ordersModel = new DefaultTableModel(new String[]{"Mã HĐ", "Bàn", "Trạng thái"}, 0);
+            ordersModel = new DefaultTableModel(new String[]{"Mã HĐ", "Bàn"}, 0);
             ordersTable = new JTable(ordersModel);
             JScrollPane ordersScroll = new JScrollPane(ordersTable);
             ordersScroll.setBorder(BorderFactory.createTitledBorder("Danh sách hóa đơn (Chọn để load)"));
@@ -125,18 +125,21 @@ public class XuLi extends JPanel {
              tableLayout.setMinimumSize(new Dimension(480, 280));
 
             // When selecting an order from the list, load its products from DB
-            ordersTable.getSelectionModel().addListSelectionListener(e -> {
-                if (!e.getValueIsAdjusting()) {
-                    int r = ordersTable.getSelectedRow();
-                    if (r >= 0) {
-                        int modelRow = ordersTable.convertRowIndexToModel(r);
-                        if (modelRow >= 0 && modelRow < currentOrders.size()) {
-                            DonHang order = currentOrders.get(modelRow);
-                            displayOrder(order);
-                        }
-                    }
-                }
-            });
+             ordersTable.getSelectionModel().addListSelectionListener(e -> {
+            	    if (e.getValueIsAdjusting() || isProgrammaticSelection) return;
+
+            	    int viewRow = ordersTable.getSelectedRow();
+            	    if (viewRow < 0) return;
+
+            	    int modelRow = ordersTable.convertRowIndexToModel(viewRow);
+            	    if (modelRow < 0 || modelRow >= currentOrders.size()) return;
+
+            	    DonHang order = currentOrders.get(modelRow);
+            	    if (order != null) {
+            	        displayOrder(order);
+            	    }
+            	});
+             
 
             // Limit the orders list height so the table layout keeps enough vertical space
             ordersScroll.setPreferredSize(new Dimension(560, 160));
@@ -182,7 +185,15 @@ public class XuLi extends JPanel {
 
             row++;
             gbc.gridx = 0; gbc.gridy = row; paymentInfo.add(new JLabel("SĐT:"), gbc);
-            gbc.gridx = 1; paymentInfo.add(customerPhoneField, gbc);
+            gbc.gridx = 1; 
+            JPanel phonePanel = new JPanel(new BorderLayout(4, 4));
+            phonePanel.setOpaque(false);
+            JButton lookupPhoneBtn = new JButton("Tìm");
+            lookupPhoneBtn.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+            lookupPhoneBtn.setFocusPainted(false);
+            phonePanel.add(customerPhoneField, BorderLayout.CENTER);
+            phonePanel.add(lookupPhoneBtn, BorderLayout.EAST);
+            paymentInfo.add(phonePanel, gbc);
             gbc.gridx = 2; paymentInfo.add(new JLabel("Tổng tiền:"), gbc);
             gbc.gridx = 3; paymentInfo.add(totalField, gbc);
 
@@ -231,45 +242,98 @@ public class XuLi extends JPanel {
             tableLayout.addTableSelectionListener(this::loadOrderFromTable);
 
             payBtn.addActionListener(e -> processPayment());
+            
+            lookupPhoneBtn.addActionListener(e -> lookupCustomerByPhone());
+            
+            cashField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+                public void insertUpdate(javax.swing.event.DocumentEvent e) { updateChange(); }
+                public void removeUpdate(javax.swing.event.DocumentEvent e) { updateChange(); }
+                public void changedUpdate(javax.swing.event.DocumentEvent e) { updateChange(); }
+            });
 
             reloadOrdersFromDatabase();
         }
 
         // expose tableLayout so other panels can use the shared list
         public GiaoDienKhuVucBan getTableLayout() { return tableLayout; }
+        private void loadByOrderId(int orderId) {
+            for (int i = 0; i < currentOrders.size(); i++) {
+                DonHang d = currentOrders.get(i);
+                if (d != null && d.getMaDonHang() == orderId) {
+
+                    // Prevent recursive events
+                    isProgrammaticSelection = true;
+                    ordersTable.setRowSelectionInterval(i, i);
+                    isProgrammaticSelection = false;
+
+                    displayOrder(d);
+                    return;
+                }
+            }
+        }
+
+        private void refreshTableLayoutFromDatabase() {
+            new SwingWorker<List<Ban>, Void>() {
+                @Override
+                protected List<Ban> doInBackground() {
+                    BanDAO banDAO = new BanDAO();
+                    return banDAO.layHet();
+                }
+
+                @Override
+                protected void done() {
+                    try {
+                        List<Ban> allBans = get();
+                        if (allBans != null) {
+                            tableLayout.getTableModel().mergeStatuses(allBans);
+                        }
+                    } catch (Exception ex) {
+                        ex.printStackTrace();
+                    }
+                }
+            }.execute();
+        }
 
         private void reloadOrdersFromDatabase() {
             ordersModel.setRowCount(0);
             currentOrders.clear();
+            clearOrderDisplay();
+
             new SwingWorker<List<DonHang>, Void>() {
                 @Override
                 protected List<DonHang> doInBackground() {
-                    return donHangDAO.layHet();
+                    List<DonHang> all = donHangDAO.layHet();
+                    if (all == null) return List.of();
+
+                    return all.stream()
+                              .filter(d -> "dangMo".equals(d.getTrangThai()))
+                              .toList();
                 }
 
                 @Override
                 protected void done() {
                     try {
                         List<DonHang> list = get();
-                        if (list != null) {
-                            for (DonHang d : list) {
-                                currentOrders.add(d);
-                                ordersModel.addRow(new Object[]{d.getMaDonHang(), formatTableName(d), d.getTrangThai()});
-                            }
+                        for (DonHang d : list) {
+                            currentOrders.add(d);
+                            ordersModel.addRow(new Object[] {
+                                d.getMaDonHang(), formatTableName(d)
+                            });
                         }
+
                         if (!currentOrders.isEmpty()) {
-                            ordersTable.setRowSelectionInterval(0, 0);
-                            displayOrder(currentOrders.get(0));
-                        } else {
-                            clearOrderDisplay();
+                            loadByOrderId(currentOrders.get(0).getMaDonHang());
                         }
+
                     } catch (Exception ex) {
                         ex.printStackTrace();
-                        JOptionPane.showMessageDialog(PaymentPanel.this, "Không tải được danh sách hóa đơn từ CSDL.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                        JOptionPane.showMessageDialog(PaymentPanel.this,
+                                "Không tải được danh sách hóa đơn từ CSDL.", "Lỗi", JOptionPane.ERROR_MESSAGE);
                     }
                 }
             }.execute();
         }
+
 
         private String formatTableName(DonHang order) {
             if (order == null) return "";
@@ -287,12 +351,19 @@ public class XuLi extends JPanel {
                 clearOrderDisplay();
                 return;
             }
+            currentLoadedOrder = order;
             customerIdField.setText(order.getMaKhachHang() != null ? order.getMaKhachHang().toString() : "");
             discountField.setText(formatCurrency(order.getTienGiam()));
-            taxField.setText(formatCurrency(order.getTienThue()));
+            if (order.getTienThue() != null && order.getTienThue().compareTo(BigDecimal.ZERO) > 0) {
+                taxField.setText(order.getTienThue().toString());
+            } else {
+                taxField.setText("0");
+            }
             totalField.setText(formatCurrency(order.getTongCuoi()));
             fillCustomerInfo(order.getMaKhachHang());
-            loadOrderDetailsFromDatabase(order.getMaDonHang());
+            // Clear products table first before loading new details to prevent duplicates
+            productModel.setRowCount(0);
+            loadOrderDetailsFromDatabase(order.getMaDonHang(), order.getTongCuoi());
         }
 
         private void clearOrderDisplay() {
@@ -344,7 +415,69 @@ public class XuLi extends JPanel {
             }.execute();
         }
 
-        private void loadOrderDetailsFromDatabase(int maDonHang) {
+        private void lookupCustomerByPhone() {
+            String phone = customerPhoneField.getText().trim();
+            if (phone.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Vui lòng nhập số điện thoại để tìm khách hàng.", "Thông báo", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            new SwingWorker<KhachHang, Void>() {
+                @Override
+                protected KhachHang doInBackground() {
+                    return khachHangDAO.layTheoSoDienThoai(phone);
+                }
+
+                @Override
+                protected void done() {
+                    try {
+                        KhachHang kh = get();
+                        if (kh != null) {
+                            customerIdField.setText(kh.getMaKhachHang() + "");
+                            customerNameField.setText(kh.getHoTen());
+                            customerPhoneField.setText(kh.getSoDienThoai());
+                            pendingCustomerId = kh.getMaKhachHang();
+                            JOptionPane.showMessageDialog(PaymentPanel.this, "Tìm thấy khách hàng: " + kh.getHoTen(), "Thành công", JOptionPane.INFORMATION_MESSAGE);
+                        } else {
+                            JOptionPane.showMessageDialog(PaymentPanel.this, "Không tìm thấy khách hàng với số điện thoại này.", "Không tìm thấy", JOptionPane.INFORMATION_MESSAGE);
+                            customerIdField.setText("");
+                            customerNameField.setText("Khách lẻ");
+                        }
+                    } catch (Exception ex) {
+                        ex.printStackTrace();
+                        JOptionPane.showMessageDialog(PaymentPanel.this, "Lỗi khi tìm khách hàng.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                    }
+                }
+            }.execute();
+        }
+
+        private void updateChange() {
+            String cashStr = cashField.getText().trim();
+            String totalStr = totalField.getText();
+            
+            if (cashStr.isEmpty() || totalStr.isEmpty()) {
+                changeLabel.setText("Tiền thối lại: 0 đ");
+                return;
+            }
+
+            try {
+                BigDecimal cash = new BigDecimal(cashStr.replaceAll("[^0-9.-]", ""));
+                BigDecimal total = new BigDecimal(totalStr.replaceAll("[^0-9.-]", ""));
+                BigDecimal change = cash.subtract(total);
+                
+                if (change.compareTo(BigDecimal.ZERO) < 0) {
+                    changeLabel.setText("Tiền thối lại: KHÔNG ĐỦ");
+                    changeLabel.setForeground(Color.RED);
+                } else {
+                    changeLabel.setText("Tiền thối lại: " + formatCurrency(change));
+                    changeLabel.setForeground(Color.BLACK);
+                }
+            } catch (Exception ex) {
+                changeLabel.setText("Tiền thối lại: 0 đ");
+            }
+        }
+
+        private void loadOrderDetailsFromDatabase(int maDonHang, BigDecimal tongCuoiExpected) {
             productModel.setRowCount(0);
             new SwingWorker<List<ChiTietDonHang>, Void>() {
                 @Override
@@ -364,7 +497,10 @@ public class XuLi extends JPanel {
                                 productModel.addRow(new Object[]{ct.getMaMon(), tenMon, ct.getSoLuong(), ct.getGiaBan(), ct.getThanhTien()});
                             }
                         }
-                        updateTotalFromProducts();
+                        // Preserve the tongCuoi value (total with tax), don't recalculate from products
+                        if (tongCuoiExpected != null) {
+                            totalField.setText(formatCurrency(tongCuoiExpected));
+                        }
                     } catch (Exception ex) {
                         ex.printStackTrace();
                         JOptionPane.showMessageDialog(PaymentPanel.this, "Không tải được chi tiết hóa đơn.", "Lỗi", JOptionPane.ERROR_MESSAGE);
@@ -374,9 +510,9 @@ public class XuLi extends JPanel {
         }
 
         private void loadOrderFromTable(CafeTable t) {
-            if (t == null) return;
-            if (t.maBan <= 0) {
-                JOptionPane.showMessageDialog(this, "Bàn này không liên kết với hóa đơn tại chỗ.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+            if (t == null || t.maBan <= 0) {
+                JOptionPane.showMessageDialog(this, "Bàn này không liên kết với hóa đơn tại chỗ.",
+                        "Thông báo", JOptionPane.INFORMATION_MESSAGE);
                 return;
             }
 
@@ -385,10 +521,12 @@ public class XuLi extends JPanel {
                 protected DonHang doInBackground() {
                     List<DonHang> list = donHangDAO.layTheoBan(t.maBan);
                     if (list == null || list.isEmpty()) return null;
-                    for (DonHang dh : list) {
-                        if (!isPaid(dh)) return dh;
-                    }
-                    return list.get(0);
+
+                    // Load first unpaid order, otherwise the first
+                    return list.stream()
+                               .filter(d -> !isPaid(d))
+                               .findFirst()
+                               .orElse(list.get(0));
                 }
 
                 @Override
@@ -396,14 +534,16 @@ public class XuLi extends JPanel {
                     try {
                         DonHang dh = get();
                         if (dh != null) {
-                            selectOrderInTable(dh.getMaDonHang());
-                            displayOrder(dh);
+                            loadByOrderId(dh.getMaDonHang());
                         } else {
-                            JOptionPane.showMessageDialog(PaymentPanel.this, "Chưa có hóa đơn nào gắn với bàn " + t.name + ".", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+                            JOptionPane.showMessageDialog(PaymentPanel.this,
+                                "Chưa có hóa đơn nào gắn với bàn " + t.name + ".", 
+                                "Thông báo", JOptionPane.INFORMATION_MESSAGE);
                         }
                     } catch (Exception ex) {
                         ex.printStackTrace();
-                        JOptionPane.showMessageDialog(PaymentPanel.this, "Lỗi khi tải hóa đơn của bàn.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                        JOptionPane.showMessageDialog(PaymentPanel.this,
+                                "Lỗi khi tải hóa đơn của bàn.", "Lỗi", JOptionPane.ERROR_MESSAGE);
                     }
                 }
             }.execute();
@@ -466,174 +606,110 @@ public class XuLi extends JPanel {
                 return;
             }
 
-            int confirm = JOptionPane.showConfirmDialog(this, "Xác nhận thanh toán?", "Xác nhận", JOptionPane.YES_NO_OPTION);
-            if (confirm != JOptionPane.YES_OPTION) return;
-
-            // after confirm, show print option dialog
-            int printOpt = JOptionPane.showOptionDialog(this,
-                    "Thanh toán thành công. Bạn có muốn in hóa đơn?",
-                    "In hóa đơn",
-                    JOptionPane.YES_NO_OPTION,
-                    JOptionPane.QUESTION_MESSAGE,
-                    null,
-                    new String[]{"In hóa đơn", "Đóng"},
-                    "In hóa đơn");
-
-            if (printOpt == JOptionPane.YES_OPTION) {
-                // simulate print: show a dialog with invoice content (placeholder)
-                StringBuilder invoice = new StringBuilder();
-                invoice.append("***** HÓA ĐƠN *****\n");
-                invoice.append("Khách: ").append(customerNameField.getText()).append("\n");
-                invoice.append("SĐT: ").append(customerPhoneField.getText()).append("\n");
-                invoice.append("--------------------------------\n");
-                for (int i = 0; i < productModel.getRowCount(); i++) {
-                    invoice.append(productModel.getValueAt(i,1)).append(" x").append(productModel.getValueAt(i,2)).append("   ").append(productModel.getValueAt(i,4)).append("\n");
-                }
-                invoice.append("--------------------------------\n");
-                invoice.append("Tổng: ").append(totalField.getText()).append(" đ\n");
-                JOptionPane.showMessageDialog(this, invoice.toString(), "Hóa đơn (giả lập)", JOptionPane.INFORMATION_MESSAGE);
-            }
-
-            // clear after payment
-            clearOrderDisplay();
-            cashField.setText("");
-            changeLabel.setText("Tiền thối lại: 0 đ");
-        }
-    }
-    static class PrintPanel extends JPanel {
-        private final JTextArea invoiceArea;
-        private final JTable invoiceTable;
-        private final DefaultTableModel invoiceModel;
-        private final JLabel timeLabel = new JLabel("Chưa chọn hóa đơn");
-
-        public PrintPanel() {
-            setLayout(new BorderLayout(15, 15));
-            setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
-            setBackground(new Color(250, 250, 255));
-
-            // ==== TIÊU ĐỀ ====
-            JLabel title = new JLabel("In hóa đơn", SwingConstants.CENTER);
-            title.setFont(new Font("Segoe UI", Font.BOLD, 18));
-            title.setForeground(new Color(40, 70, 140));
-            add(title, BorderLayout.NORTH);
-
-            // ==== BẢNG DANH SÁCH HÓA ĐƠN ====
-            String[] cols = {"Mã HĐ", "Bàn", "Tổng tiền", "Trạng thái"};
-            invoiceModel = new DefaultTableModel(cols, 0);
-            invoiceTable = new JTable(invoiceModel);
-            invoiceTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-
-            JScrollPane tableScroll = new JScrollPane(invoiceTable);
-            tableScroll.setBorder(BorderFactory.createTitledBorder("Danh sách hóa đơn"));
-            add(tableScroll, BorderLayout.WEST);
-
-            // ==== VÙNG XEM TRƯỚC HÓA ĐƠN ====
-            invoiceArea = new JTextArea(18, 30);
-            invoiceArea.setFont(new Font("Consolas", Font.PLAIN, 13));
-            invoiceArea.setEditable(false);
-            invoiceArea.setBorder(BorderFactory.createTitledBorder("Xem trước hóa đơn"));
-            add(new JScrollPane(invoiceArea), BorderLayout.CENTER);
-
-            // ==== PANEL DƯỚI (THỜI GIAN + NÚT) ====
-            JPanel bottom = new JPanel(new BorderLayout(10, 10));
-            bottom.setOpaque(false);
-
-            // Nhãn thời gian
-            timeLabel.setFont(new Font("Segoe UI", Font.ITALIC, 12));
-            timeLabel.setForeground(Color.DARK_GRAY);
-            bottom.add(timeLabel, BorderLayout.WEST);
-
-            // Nút hành động
-            JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 5));
-            btnPanel.setOpaque(false);
-            JButton loadBtn = new JButton("Chọn hóa đơn");
-            JButton printBtn = new JButton("In hóa đơn");
-            styleButton(loadBtn);
-            styleButton(printBtn);
-            btnPanel.add(loadBtn);
-            btnPanel.add(printBtn);
-            bottom.add(btnPanel, BorderLayout.EAST);
-
-            add(bottom, BorderLayout.SOUTH);
-
-            // ==== DỮ LIỆU MẪU ====
-            loadSampleInvoices();
-
-            // ==== SỰ KIỆN ====
-            loadBtn.addActionListener(e -> handleSelect());
-            printBtn.addActionListener(e -> handlePrint());
-        }
-
-        private void styleButton(JButton btn) {
-            btn.setFont(new Font("Segoe UI", Font.PLAIN, 14));
-            btn.setFocusPainted(false);
-            btn.setBackground(new Color(220, 235, 255));
-            btn.setBorder(BorderFactory.createCompoundBorder(
-                    BorderFactory.createLineBorder(new Color(180, 200, 240)),
-                    BorderFactory.createEmptyBorder(6, 12, 6, 12)
-            ));
-        }
-
-        private void loadSampleInvoices() {
-            invoiceModel.addRow(new Object[]{"ORD001", "Bàn 1", "125.000đ", "Đã thanh toán"});
-            invoiceModel.addRow(new Object[]{"ORD002", "Bàn 2", "75.000đ", "Đã thanh toán"});
-            invoiceModel.addRow(new Object[]{"ORD003", "Bàn 3", "215.000đ", "Chưa in"});
-        }
-
-        private void handleSelect() {
-            int row = invoiceTable.getSelectedRow();
-            if (row < 0) {
-                JOptionPane.showMessageDialog(this, "Vui lòng chọn hóa đơn từ danh sách!", "Cảnh báo", JOptionPane.WARNING_MESSAGE);
+            if (currentLoadedOrder == null) {
+                JOptionPane.showMessageDialog(this, "Không có hóa đơn nào để thanh toán!", "Cảnh báo", JOptionPane.WARNING_MESSAGE);
                 return;
             }
 
-            String code = invoiceModel.getValueAt(row, 0).toString();
-            String table = invoiceModel.getValueAt(row, 1).toString();
-            String total = invoiceModel.getValueAt(row, 2).toString();
-            String status = invoiceModel.getValueAt(row, 3).toString();
-
-            invoiceArea.setText(
-                    "************ CAFE POS ************\n" +
-                            "Mã Hóa Đơn: " + code + "\n" +
-                            "Bàn: " + table + "\n" +
-                            "----------------------------------\n" +
-                            "Cà phê sữa x1 ............. 25.000đ\n" +
-                            "Trà đào x1 ................. 30.000đ\n" +
-                            "----------------------------------\n" +
-                            "TỔNG CỘNG: " + total + "\n" +
-                            "Trạng thái: " + status + "\n" +
-                            "----------------------------------\n" +
-                            "Cảm ơn quý khách!\n"
-            );
-
-            LocalDateTime now = LocalDateTime.now();
-            DateTimeFormatter fmt = DateTimeFormatter.ofPattern("HH:mm:ss - dd/MM/yyyy");
-            timeLabel.setText("Đang xem hóa đơn " + code + " | " + now.format(fmt));
-        }
-
-        private void handlePrint() {
-            if (invoiceArea.getText().isEmpty()) {
-                JOptionPane.showMessageDialog(this, "Chưa có hóa đơn nào để in!", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            // Validate cash before processing payment
+            String cashStr = cashField.getText().trim();
+            String totalStr = totalField.getText();
+            
+            if (cashStr.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Vui lòng nhập số tiền khách đưa!", "Cảnh báo", JOptionPane.WARNING_MESSAGE);
                 return;
             }
 
             try {
-                // Giả lập hành động in — lưu file txt
-                File outFile = new File("hoadon_" + System.currentTimeMillis() + ".txt");
-                try (PrintWriter writer = new PrintWriter(outFile)) {
-                    writer.print(invoiceArea.getText());
+                BigDecimal cash = new BigDecimal(cashStr.replaceAll("[^0-9.-]", ""));
+                BigDecimal total = new BigDecimal(totalStr.replaceAll("[^0-9.-]", ""));
+                
+                if (cash.compareTo(total) < 0) {
+                    JOptionPane.showMessageDialog(this, "Số tiền khách đưa không đủ! Cần thêm " + formatCurrency(total.subtract(cash)), "Cảnh báo", JOptionPane.WARNING_MESSAGE);
+                    return;
                 }
-                JOptionPane.showMessageDialog(this, "Đã gửi lệnh in (giả lập)\nTệp: " + outFile.getName(), "Thành công", JOptionPane.INFORMATION_MESSAGE);
-
-                LocalDateTime now = LocalDateTime.now();
-                DateTimeFormatter fmt = DateTimeFormatter.ofPattern("HH:mm:ss - dd/MM/yyyy");
-                timeLabel.setText("Đã in lúc " + now.format(fmt));
             } catch (Exception ex) {
-                JOptionPane.showMessageDialog(this, "Lỗi khi in hóa đơn: " + ex.getMessage(), "Lỗi", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(this, "Số tiền không hợp lệ!", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                return;
             }
+
+            int confirm = JOptionPane.showConfirmDialog(this, "Xác nhận thanh toán?", "Xác nhận", JOptionPane.YES_NO_OPTION);
+            if (confirm != JOptionPane.YES_OPTION) return;
+
+            new SwingWorker<Boolean, Void>() {
+                @Override
+                protected Boolean doInBackground() {
+                    try {
+                        // Update DonHang trangThai to "daThanhToan"
+                        currentLoadedOrder.setTrangThai("daThanhToan");
+                        if (!donHangDAO.capNhat(currentLoadedOrder)) {
+                            return false;
+                        }
+
+                        // Update Ban trangThai to "trong" and clear maDonHang
+                        Ban ban = banDAO.layTheoId(currentLoadedOrder.getMaBan());
+                        if (ban != null) {
+                            ban.setTrangThai("trong");
+                            ban.setMaDonHang(null);
+                            if (!banDAO.capNhat(ban)) {
+                                return false;
+                            }
+                        }
+
+                        return true;
+                    } catch (Exception ex) {
+                        ex.printStackTrace();
+                        return false;
+                    }
+                }
+
+                @Override
+                protected void done() {
+                    try {
+                        Boolean success = get();
+                        if (success) {
+                            // Show print option dialog
+                            int printOpt = JOptionPane.showOptionDialog(PaymentPanel.this,
+                                    "Thanh toán thành công. Bạn có muốn in hóa đơn?",
+                                    "In hóa đơn",
+                                    JOptionPane.YES_NO_OPTION,
+                                    JOptionPane.QUESTION_MESSAGE,
+                                    null,
+                                    new String[]{"In hóa đơn", "Đóng"},
+                                    "In hóa đơn");
+
+                            if (printOpt == JOptionPane.YES_OPTION) {
+                                StringBuilder invoice = new StringBuilder();
+                                invoice.append("***** HÓA ĐƠN *****\n");
+                                invoice.append("Khách: ").append(customerNameField.getText()).append("\n");
+                                invoice.append("SĐT: ").append(customerPhoneField.getText()).append("\n");
+                                invoice.append("--------------------------------\n");
+                                for (int i = 0; i < productModel.getRowCount(); i++) {
+                                    invoice.append(productModel.getValueAt(i,1)).append(" x").append(productModel.getValueAt(i,2)).append("   ").append(productModel.getValueAt(i,4)).append("\n");
+                                }
+                                invoice.append("--------------------------------\n");
+                                invoice.append("Tổng: ").append(totalField.getText()).append(" đ\n");
+                                JOptionPane.showMessageDialog(PaymentPanel.this, invoice.toString(), "Hóa đơn", JOptionPane.INFORMATION_MESSAGE);
+                            }
+
+                            // Reload orders and refresh table layout from database
+                            reloadOrdersFromDatabase();
+                            refreshTableLayoutFromDatabase();
+                            clearOrderDisplay();
+                            cashField.setText("");
+                            changeLabel.setText("Tiền thối lại: 0 đ");
+                            changeLabel.setForeground(Color.BLACK);
+                        } else {
+                            JOptionPane.showMessageDialog(PaymentPanel.this, "Lỗi khi cập nhật trạng thái thanh toán.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                        }
+                    } catch (Exception ex) {
+                        ex.printStackTrace();
+                        JOptionPane.showMessageDialog(PaymentPanel.this, "Lỗi: " + ex.getMessage(), "Lỗi", JOptionPane.ERROR_MESSAGE);
+                    }
+                }
+            }.execute();
         }
     }
-
     static class RefundPanel extends JPanel {
         private final JTextField searchField = new JTextField(15);
         private final JTable invoiceTable;
@@ -696,9 +772,6 @@ public class XuLi extends JPanel {
 
             add(bottom, BorderLayout.SOUTH);
 
-            // === Dữ liệu mẫu để demo ===
-            loadSampleInvoices();
-
             // === Sự kiện ===
             searchBtn.addActionListener(e -> searchInvoice());
             invoiceTable.getSelectionModel().addListSelectionListener(e -> {
@@ -715,12 +788,6 @@ public class XuLi extends JPanel {
                     BorderFactory.createLineBorder(new Color(180, 200, 240)),
                     BorderFactory.createEmptyBorder(6, 12, 6, 12)
             ));
-        }
-
-        private void loadSampleInvoices() {
-            invoiceModel.addRow(new Object[]{"HD001", "Bàn 3", "120.000đ", "10/11/2025"});
-            invoiceModel.addRow(new Object[]{"HD002", "Bàn 7", "85.000đ", "11/11/2025"});
-            invoiceModel.addRow(new Object[]{"HD003", "Mang đi", "45.000đ", "12/11/2025"});
         }
 
         private void searchInvoice() {
@@ -749,20 +816,23 @@ public class XuLi extends JPanel {
             detailModel.setRowCount(0);
 
             String id = invoiceModel.getValueAt(row, 0).toString();
-            // Dữ liệu mẫu
-            switch (id) {
-                case "HD001" -> {
-                    detailModel.addRow(new Object[]{"Cà phê sữa", 2, "25.000đ", "50.000đ"});
-                    detailModel.addRow(new Object[]{"Bánh ngọt", 1, "70.000đ", "70.000đ"});
+            try {
+                DonHangDAO donHangDAO = new DonHangDAO();
+                DonHang order = donHangDAO.layTheoId(Integer.parseInt(id));
+                if (order != null) {
+                    ChiTietDonHangDAO chiTietDAO = new ChiTietDonHangDAO();
+                    List<ChiTietDonHang> details = chiTietDAO.layTheoDonHang(order.getMaDonHang());
+                    if (details != null) {
+                        for (ChiTietDonHang ct : details) {
+                            String tenMon = ct.getMon() != null && ct.getMon().getTenMon() != null
+                                    ? ct.getMon().getTenMon()
+                                    : ("Món " + ct.getMaMon());
+                            detailModel.addRow(new Object[]{tenMon, ct.getSoLuong(), ct.getGiaBan(), ct.getThanhTien()});
+                        }
+                    }
                 }
-                case "HD002" -> {
-                    detailModel.addRow(new Object[]{"Trà đào", 1, "45.000đ", "45.000đ"});
-                    detailModel.addRow(new Object[]{"Bánh mì bơ tỏi", 2, "20.000đ", "40.000đ"});
-                }
-                case "HD003" -> {
-                    detailModel.addRow(new Object[]{"Cà phê đen", 1, "25.000đ", "25.000đ"});
-                    detailModel.addRow(new Object[]{"Nước suối", 1, "20.000đ", "20.000đ"});
-                }
+            } catch (Exception ex) {
+                ex.printStackTrace();
             }
         }
 
@@ -791,199 +861,6 @@ public class XuLi extends JPanel {
                 noteArea.setText("");
                 detailModel.setRowCount(0);
             }
-        }
-    }
-
-    class TransferCancelPanel extends JPanel {
-        private final JTable orderTable;
-        private final DefaultTableModel orderModel;
-        private final JTextField newTableField = new JTextField(10);
-        private final JTextArea noteArea = new JTextArea(3, 20);
-        private final JLabel timeLabel = new JLabel("");
-
-        public TransferCancelPanel() {
-            setLayout(new BorderLayout(15, 15));
-            setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
-            setBackground(new Color(250, 250, 255));
-
-            // ==== TIÊU ĐỀ ====
-            JLabel title = new JLabel("Chuyển bàn / Hủy đơn", SwingConstants.CENTER);
-            title.setFont(new Font("Segoe UI", Font.BOLD, 18));
-            title.setForeground(new Color(60, 80, 150));
-            add(title, BorderLayout.NORTH);
-
-            // ==== BẢNG DANH SÁCH ĐƠN HÀNG ====
-            String[] cols = {"Mã đơn", "Bàn hiện tại", "Tổng tiền", "Trạng thái"};
-            orderModel = new DefaultTableModel(cols, 0);
-            orderTable = new JTable(orderModel);
-            orderTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-            JScrollPane tableScroll = new JScrollPane(orderTable);
-            tableScroll.setBorder(BorderFactory.createTitledBorder("Danh sách đơn hàng"));
-            add(tableScroll, BorderLayout.CENTER);
-
-            // ==== PANEL DƯỚI (GỒM FORM + NÚT + THỜI GIAN) ====
-            JPanel bottomPanel = new JPanel(new BorderLayout(10, 10));
-            bottomPanel.setOpaque(false);
-
-            // ---- FORM NHẬP ----
-            JPanel formPanel = new JPanel(new GridBagLayout());
-            formPanel.setOpaque(false);
-            GridBagConstraints gbc = new GridBagConstraints();
-            gbc.insets = new Insets(6, 6, 6, 6);
-            gbc.anchor = GridBagConstraints.WEST;
-            gbc.fill = GridBagConstraints.HORIZONTAL;
-
-            JLabel newTableLbl = new JLabel("Chuyển sang bàn:");
-            JLabel noteLbl = new JLabel("Ghi chú / Lý do hủy:");
-            styleLabel(newTableLbl);
-            styleLabel(noteLbl);
-
-            gbc.gridx = 0; gbc.gridy = 0;
-            formPanel.add(newTableLbl, gbc);
-            gbc.gridx = 1;
-            formPanel.add(newTableField, gbc);
-
-            gbc.gridx = 0; gbc.gridy = 1;
-            gbc.gridwidth = 2;
-            noteArea.setBorder(BorderFactory.createLineBorder(new Color(200, 200, 200)));
-            formPanel.add(new JScrollPane(noteArea), gbc);
-
-            bottomPanel.add(formPanel, BorderLayout.CENTER);
-
-            // ---- NÚT CHỨC NĂNG ----
-            JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 5));
-            btnPanel.setOpaque(false);
-            JButton transferBtn = new JButton("Chuyển bàn");
-            JButton cancelBtn = new JButton("Hủy đơn");
-            styleButton(transferBtn);
-            styleButton(cancelBtn);
-            btnPanel.add(transferBtn);
-            btnPanel.add(cancelBtn);
-            bottomPanel.add(btnPanel, BorderLayout.SOUTH);
-
-            // ---- NHÃN THỜI GIAN ----
-            timeLabel.setFont(new Font("Segoe UI", Font.ITALIC, 12));
-            timeLabel.setForeground(Color.DARK_GRAY);
-            timeLabel.setHorizontalAlignment(SwingConstants.RIGHT);
-            bottomPanel.add(timeLabel, BorderLayout.NORTH);
-
-            add(bottomPanel, BorderLayout.SOUTH);
-
-            // ==== DỮ LIỆU MẪU ====
-            loadSampleOrders();
-
-            // ==== SỰ KIỆN ====
-            transferBtn.addActionListener(e -> handleTransfer());
-            cancelBtn.addActionListener(e -> handleCancel());
-        }
-
-        private void styleLabel(JLabel lbl) {
-            lbl.setFont(new Font("Segoe UI", Font.PLAIN, 14));
-        }
-
-        private void styleButton(JButton btn) {
-            btn.setFont(new Font("Segoe UI", Font.PLAIN, 14));
-            btn.setFocusPainted(false);
-            btn.setBackground(new Color(220, 235, 255));
-            btn.setBorder(BorderFactory.createCompoundBorder(
-                    BorderFactory.createLineBorder(new Color(180, 200, 240)),
-                    BorderFactory.createEmptyBorder(6, 12, 6, 12)
-            ));
-        }
-
-        private void loadSampleOrders() {
-            orderModel.addRow(new Object[]{"ORD001", "Bàn 1", "125.000đ", "Đang phục vụ"});
-            orderModel.addRow(new Object[]{"ORD002", "Bàn 3", "210.000đ", "Đã thanh toán"});
-            orderModel.addRow(new Object[]{"ORD003", "Bàn 6", "80.000đ", "Đang phục vụ"});
-        }
-
-        private void handleTransfer() {
-            int row = orderTable.getSelectedRow();
-            if (row < 0) {
-                JOptionPane.showMessageDialog(this, "Vui lòng chọn đơn hàng để chuyển bàn!", "Cảnh báo", JOptionPane.WARNING_MESSAGE);
-                return;
-            }
-
-            String orderId = orderModel.getValueAt(row, 0).toString();
-            String oldTable = orderModel.getValueAt(row, 1).toString();
-
-            // Use the real shared tables from the payment panel layout and start a transfer
-            GiaoDienKhuVucBan layout = XuLi.this.paymentPanel.getTableLayout();
-            boolean started = layout.beginTransferFrom(oldTable);
-            if (!started) return;
-
-            // Add a temporary listener that will be notified when the transfer completes inside the layout
-            final int selRow = row;
-            final String selOrderId = orderId;
-            GiaoDienKhuVucBan.TableSelectionListener temp = new GiaoDienKhuVucBan.TableSelectionListener() {
-                @Override
-                public void tableSelected(GiaoDienKhuVucBan.CafeTable t) {
-                    // Update order model and UI and remove this listener
-                    SwingUtilities.invokeLater(() -> {
-                        orderModel.setValueAt(t.name, selRow, 1);
-                        updateTimeLabel("Chuyển bàn " + selOrderId + " thành công!");
-                        layout.removeTableSelectionListener(this);
-                    });
-                }
-            };
-            layout.addTableSelectionListener(temp);
-        }
-
-        // helper trying to map strings like "Bàn 1" or "T1" to the CafeTable instances
-        private GiaoDienKhuVucBan.CafeTable findMatchingTable(List<GiaoDienKhuVucBan.CafeTable> tables, String label) {
-            if (label == null) return null;
-            // direct match first
-            for (GiaoDienKhuVucBan.CafeTable t : tables) {
-                if (t.name != null && t.name.equalsIgnoreCase(label)) return t;
-            }
-            // try to extract a number from label (e.g. "Bàn 1" -> 1) and match T<number>
-            String digits = label.replaceAll("\\D+", "");
-            if (!digits.isEmpty()) {
-                String tname = "T" + digits;
-                for (GiaoDienKhuVucBan.CafeTable t : tables) {
-                    if (t.name != null && t.name.startsWith(tname)) return t;
-                }
-            }
-            // fallback: match contains
-            for (GiaoDienKhuVucBan.CafeTable t : tables) {
-                if (t.name != null && label.contains(t.name)) return t;
-            }
-            return null;
-        }
-
-        private void handleCancel() {
-            int row = orderTable.getSelectedRow();
-            if (row < 0) {
-                JOptionPane.showMessageDialog(this, "Vui lòng chọn đơn hàng để hủy!", "Cảnh báo", JOptionPane.WARNING_MESSAGE);
-                return;
-            }
-
-            String note = noteArea.getText().trim();
-            if (note.isEmpty()) {
-                int opt = JOptionPane.showConfirmDialog(this,
-                        "Bạn chưa nhập lý do hủy. Tiếp tục?", "Xác nhận", JOptionPane.YES_NO_OPTION);
-                if (opt != JOptionPane.YES_OPTION) return;
-            }
-
-            String orderId = orderModel.getValueAt(row, 0).toString();
-
-            int confirm = JOptionPane.showConfirmDialog(this,
-                    "Xác nhận hủy đơn " + orderId + "?",
-                    "Xác nhận hủy đơn", JOptionPane.YES_NO_OPTION);
-
-            if (confirm == JOptionPane.YES_OPTION) {
-                orderModel.setValueAt("Đã hủy", row, 3);
-                updateTimeLabel("Đơn " + orderId + " đã bị hủy.");
-                JOptionPane.showMessageDialog(this, "Hủy đơn " + orderId + " thành công!");
-            }
-        }
-
-        private void updateTimeLabel(String action) {
-            LocalDateTime now = LocalDateTime.now();
-            DateTimeFormatter fmt = DateTimeFormatter.ofPattern("HH:mm:ss - dd/MM/yyyy");
-            timeLabel.setText(action + " (" + now.format(fmt) + ")");
-            newTableField.setText("");
-            noteArea.setText("");
         }
     }
 

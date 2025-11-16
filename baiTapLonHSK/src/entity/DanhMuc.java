@@ -15,4 +15,10 @@ public class DanhMuc {
 
     public String getMoTa() { return moTa; }
     public void setMoTa(String moTa) { this.moTa = moTa; }
+
+    // Render-friendly string for UI components (JComboBox, lists, etc.)
+    @Override
+    public String toString() {
+        return tenDanhMuc == null ? "" : tenDanhMuc;
+    }
 }

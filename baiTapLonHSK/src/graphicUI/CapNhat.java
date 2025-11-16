@@ -4,12 +4,28 @@ import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.ActionEvent;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.math.BigDecimal;
+import java.util.*;
+import java.util.List;
 
 import components.GiaoDienKhuVucBan;
+import dao.DanhMucDAO;
+import dao.MonDAO;
+import dao.TonKhoDAO;
+import dao.DonHangDAO;
+import dao.ChiTietDonHangDAO;
+import dao.BanDAO;
+import dao.ThueDAO;
+import entity.DanhMuc;
+import entity.Mon;
+import entity.TonKho;
+import entity.DonHang;
+import entity.ChiTietDonHang;
+import entity.Ban;
+import entity.Thue;
 
 /**
- * UpdatePanel contains subpages: Order (default), Table status, Price/Stock updates.
+ * UpdatePanel contains subpages: Order (default), Table status.
  */
 public class CapNhat extends JPanel {
     private JTabbedPane tabs;
@@ -23,7 +39,6 @@ public class CapNhat extends JPanel {
         orderPanel = new OrderPanel();
         tabs.addTab("Đơn hàng mới", orderPanel);
         tabs.addTab("Cập nhật trạng thái bàn", new TableStatusPanel());
-        tabs.addTab("Cập nhật giá / tồn kho", new PriceStockPanel());
         add(tabs, BorderLayout.CENTER);
     }
 
@@ -31,184 +46,425 @@ public class CapNhat extends JPanel {
         tabs.setSelectedIndex(0);
     }
 
-    // Order panel: includes a TableLayoutPanel in ORDER_MODE and an order list
-    static class OrderPanel extends JPanel {
-        private DefaultTableModel orderModel;
-        private JTable orderTable;
-        private AtomicInteger orderCounter = new AtomicInteger(1);
+    // Order panel with món list on left and order items on right
+    class OrderPanel extends JPanel {
+        private DefaultTableModel monModel;
+        private JTable monTable;
+        private DefaultTableModel orderItemsModel;
+        private JTable orderItemsTable;
+        private JTextField qtyField;
+        private Map<Integer, Mon> monCache;
+        private Map<Integer, TonKho> tonKhoCache;
+        private Map<Integer, String> danhMucCache;
 
         public OrderPanel() {
             setLayout(new BorderLayout(8,8));
+            setBorder(BorderFactory.createEmptyBorder(8,8,8,8));
 
-            // Orders list only (no left table map)
-            orderModel = new DefaultTableModel(new Object[] {"Mã ĐH", "Bàn", "Items", "Tổng"}, 0);
-            orderTable = new JTable(orderModel);
-            JScrollPane ordersScroll = new JScrollPane(orderTable);
-            add(ordersScroll, BorderLayout.CENTER);
+            // Load data from DB
+            loadData();
 
-            JPanel actions = new JPanel();
-            JButton add = new JButton("Tạo đơn mới");
-            JButton updateStatus = new JButton("Cập nhật trạng thái");
-            actions.add(add); actions.add(updateStatus);
-            add(actions, BorderLayout.SOUTH);
+            // Left panel: món list
+            JPanel leftPanel = new JPanel(new BorderLayout());
+            monModel = new DefaultTableModel(new Object[]{"Mã món", "Tên", "Danh mục", "Giá bán", "Còn bán", "Mô tả"}, 0);
+            monTable = new JTable(monModel);
+            monTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+            populateMonTable();
+            leftPanel.add(new JScrollPane(monTable), BorderLayout.CENTER);
 
-            // When creating a new order, open a modal dialog that lets user pick a table
-            add.addActionListener((ActionEvent e) -> {
-                // Create a chooser TableLayoutPanel using the shared model from the outer UpdatePanel
-                GiaoDienKhuVucBan chooser = new GiaoDienKhuVucBan(GiaoDienKhuVucBan.Mode.DATBAN_MODE, ((CapNhat)SwingUtilities.getAncestorOfClass(CapNhat.class, this)).tableModel);
-                // Disable auto-occupy in the chooser; we'll occupy after confirmation
-                chooser.setAutoOccupyOnOrder(false);
+            // Right panel: order items and controls
+            JPanel rightPanel = new JPanel(new BorderLayout(8,8));
 
-                // Dialog setup (modal chooser)
-                Window parent = SwingUtilities.getWindowAncestor(this);
-                JDialog dlg = new JDialog(parent, "Chọn bàn cho đơn mới", Dialog.ModalityType.APPLICATION_MODAL);
-                dlg.getContentPane().setLayout(new BorderLayout());
-                dlg.getContentPane().add(chooser, BorderLayout.CENTER);
+            // Order items table
+            orderItemsModel = new DefaultTableModel(new Object[]{"Tên", "Giá Bán", "Số Lượng", "Thành Tiền"}, 0);
+            orderItemsTable = new JTable(orderItemsModel);
+            rightPanel.add(new JScrollPane(orderItemsTable), BorderLayout.CENTER);
 
-                // Optionally show an instruction label
-                JLabel info = new JLabel("Nhấn vào một bàn để chọn, sau đó xác nhận.");
-                info.setBorder(BorderFactory.createEmptyBorder(6,6,6,6));
-                dlg.getContentPane().add(info, BorderLayout.SOUTH);
+            // Controls: quantity input and buttons
+            JPanel controlPanel = new JPanel(new BorderLayout(8,8));
+            JPanel inputPanel = new JPanel();
+            inputPanel.add(new JLabel("Số Lượng:"));
+            qtyField = new JTextField("1", 5);
+            inputPanel.add(qtyField);
+            controlPanel.add(inputPanel, BorderLayout.WEST);
 
-                dlg.pack();
-                dlg.setLocationRelativeTo(this);
+            JPanel buttonsPanel = new JPanel();
+            JButton addBtn = new JButton("Thêm");
+            JButton deleteBtn = new JButton("Xóa");
+            JButton clearBtn = new JButton("Hủy");
+            JButton createOrderBtn = new JButton("Tạo đơn");
+            buttonsPanel.add(addBtn);
+            buttonsPanel.add(deleteBtn);
+            buttonsPanel.add(clearBtn);
+            buttonsPanel.add(createOrderBtn);
+            controlPanel.add(buttonsPanel, BorderLayout.EAST);
 
-                // Listener: when a table is clicked in chooser, confirm and then occupy + add order
-                chooser.addTableSelectionListener(table -> {
-                    SwingUtilities.invokeLater(() -> {
-                        // If table is already occupied, warn and ignore
-                        // Check if the table status is either "Occupied" OR "Reserved" (case-insensitive)
-                        if ("Occupied".equalsIgnoreCase(table.status) || "Reserved".equalsIgnoreCase(table.status)) {
+            rightPanel.add(controlPanel, BorderLayout.SOUTH);
 
-                            // Determine the specific message based on the status
-                            String message;
-                            String title = "Bàn không có sẵn"; // "Table not available"
+            // Split view: left and right
+            JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftPanel, rightPanel);
+            split.setDividerLocation(400);
+            add(split, BorderLayout.CENTER);
 
-                            if ("Occupied".equalsIgnoreCase(table.status)) {
-                                message = "Bàn " + table.name + " đang được sử dụng."; // "Table... is being used."
-                            } else {
-                                message = "Bàn " + table.name + " đã được đặt trước."; // "Table... is reserved."
-                            }
-
-                            JOptionPane.showMessageDialog(dlg,
-                                    message,
-                                    title,
-                                    JOptionPane.WARNING_MESSAGE);
-                            return;
-                        }
-
-                        int ans = JOptionPane.showConfirmDialog(dlg,
-                                "Xác nhận chọn bàn " + table.name + " cho đơn mới?",
-                                "Xác nhận chọn bàn",
-                                JOptionPane.YES_NO_OPTION);
-                        if (ans == JOptionPane.YES_OPTION) {
-                            // Occupy the table and repaint the chooser (no main map on the left)
-                            table.status = "Occupied";
-                            chooser.repaint();
-
-                            // Add order row and keep its index so we can update total later
-                            String id = String.format("ORD%03d", orderCounter.getAndIncrement());
-                            orderModel.addRow(new Object[] {id, table.name, "", "0"});
-                            int newRow = orderModel.getRowCount() - 1;
-
-                            // Close chooser dialog
-                            dlg.dispose();
-
-                            // Ensure the main orders table shows and selects the newly created order
-                            SwingUtilities.invokeLater(() -> {
-                                orderTable.setRowSelectionInterval(newRow, newRow);
-                                orderTable.scrollRectToVisible(orderTable.getCellRect(newRow, 0, true));
-                            });
-
-                            // Open a non-modal order editor window to render the order fully
-                            openOrderEditorWindow(id, table, newRow);
-                        }
-                    });
-                });
-
-                dlg.setVisible(true);
-            });
-
-            updateStatus.addActionListener((ActionEvent e) -> {
-                JOptionPane.showMessageDialog(this, "Cập nhật trạng thái bàn: mở tab 'Cập nhật trạng thái bàn'.");
-            });
+            // Button listeners
+            addBtn.addActionListener(e -> addItemToOrder());
+            deleteBtn.addActionListener(e -> deleteItemFromOrder());
+            clearBtn.addActionListener(e -> clearOrderItems());
+            createOrderBtn.addActionListener(e -> createOrder());
         }
 
-        // Opens a simple non-modal order editor where user can add items and update total
-        private void openOrderEditorWindow(String orderId, GiaoDienKhuVucBan.CafeTable table, int orderRowIndex) {
+        private void loadData() {
+            monCache = new HashMap<>();
+            tonKhoCache = new HashMap<>();
+            danhMucCache = new HashMap<>();
+
+            try {
+                MonDAO monDAO = new MonDAO();
+                List<Mon> mons = monDAO.layHet();
+                for (Mon m : mons) {
+                    monCache.put(m.getMaMon(), m);
+                }
+
+                TonKhoDAO tonKhoDAO = new TonKhoDAO();
+                List<TonKho> tonKhos = tonKhoDAO.layHet();
+                for (TonKho tk : tonKhos) {
+                    tonKhoCache.put(tk.getMaMon(), tk);
+                }
+
+                DanhMucDAO danhMucDAO = new DanhMucDAO();
+                List<DanhMuc> danhMucs = danhMucDAO.layHet();
+                for (DanhMuc dm : danhMucs) {
+                    danhMucCache.put(dm.getMaDanhMuc(), dm.getTenDanhMuc());
+                }
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+        }
+
+        private void populateMonTable() {
+            monModel.setRowCount(0);
+            for (Mon m : monCache.values()) {
+                String danhMucName = danhMucCache.getOrDefault(m.getMaDanhMuc(), "");
+                TonKho tonKho = tonKhoCache.get(m.getMaMon());
+                BigDecimal soLuong = tonKho != null ? tonKho.getSoLuong() : BigDecimal.ZERO;
+
+                monModel.addRow(new Object[]{
+                        m.getMaMon(),
+                        m.getTenMon(),
+                        danhMucName,
+                        m.getGiaBan(),
+                        m.isConBan() ? "Có" : "Không",
+                        m.getMoTa()
+                });
+            }
+        }
+
+        private void addItemToOrder() {
+            int selectedRow = monTable.getSelectedRow();
+            if (selectedRow == -1) {
+                JOptionPane.showMessageDialog(this, "Vui lòng chọn một món.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+
+            int maMon = (int) monModel.getValueAt(selectedRow, 0);
+            Mon mon = monCache.get(maMon);
+
+            if (mon == null) {
+                JOptionPane.showMessageDialog(this, "Không thể tìm thấy món.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            // Check if món is available (conBan = true and tonKho > 0)
+            if (!mon.isConBan()) {
+                JOptionPane.showMessageDialog(this, "Hết hàng: " + mon.getTenMon(), "Thông báo", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            TonKho tonKho = tonKhoCache.get(maMon);
+            if (tonKho == null || tonKho.getSoLuong().compareTo(BigDecimal.ZERO) <= 0) {
+                JOptionPane.showMessageDialog(this, "Hết hàng: " + mon.getTenMon(), "Thông báo", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            // Validate quantity input
+            String qtyStr = qtyField.getText().trim();
+            if (qtyStr.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Số Lượng không được để trống.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            try {
+                int qty = Integer.parseInt(qtyStr);
+                if (qty < 1) {
+                    JOptionPane.showMessageDialog(this, "Số Lượng phải >= 1.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+
+                // Calculate line total
+                long lineTotal = qty * mon.getGiaBan().longValue();
+
+                // Add to order items table
+                orderItemsModel.addRow(new Object[]{
+                        mon.getTenMon(),
+                        mon.getGiaBan(),
+                        qty,
+                        lineTotal
+                });
+
+                qtyField.setText("1");
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(this, "Số Lượng phải là số nguyên.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+
+        private void deleteItemFromOrder() {
+            int selectedRow = orderItemsTable.getSelectedRow();
+            if (selectedRow == -1) {
+                JOptionPane.showMessageDialog(this, "Vui lòng chọn một mục để xóa.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+            orderItemsModel.removeRow(selectedRow);
+        }
+
+        private void clearOrderItems() {
+            orderItemsModel.setRowCount(0);
+            qtyField.setText("1");
+        }
+
+        private void createOrder() {
+            if (orderItemsModel.getRowCount() == 0) {
+                JOptionPane.showMessageDialog(this, "Đơn hàng không được trống. Hãy thêm ít nhất một mục.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            // Refresh table statuses from database before opening dialog
+            refreshTableStatusesFromDB();
+
+            // Open table selection dialog
+            GiaoDienKhuVucBan chooser = new GiaoDienKhuVucBan(GiaoDienKhuVucBan.Mode.DATBAN_MODE, CapNhat.this.tableModel);
+            chooser.setAutoOccupyOnOrder(false);
+
             Window parent = SwingUtilities.getWindowAncestor(this);
-            JDialog win = new JDialog(parent, "Đơn hàng - " + orderId, Dialog.ModalityType.MODELESS);
-            win.getContentPane().setLayout(new BorderLayout(8,8));
+            JDialog dlg = new JDialog(parent, "Chọn bàn cho đơn mới", Dialog.ModalityType.APPLICATION_MODAL);
+            dlg.getContentPane().setLayout(new BorderLayout());
+            dlg.getContentPane().add(chooser, BorderLayout.CENTER);
 
-            // Header with order id and table
-            JPanel header = new JPanel(new GridLayout(2,1));
-            header.setBorder(BorderFactory.createEmptyBorder(6,6,6,6));
-            header.add(new JLabel("Mã ĐH: " + orderId));
-            header.add(new JLabel("Bàn: " + table.name));
-            win.getContentPane().add(header, BorderLayout.NORTH);
+            JLabel info = new JLabel("Nhấn vào một bàn để chọn, sau đó xác nhận.");
+            info.setBorder(BorderFactory.createEmptyBorder(6,6,6,6));
+            dlg.getContentPane().add(info, BorderLayout.SOUTH);
 
-            // Items table
-            DefaultTableModel itemsModel = new DefaultTableModel(new Object[] {"Mã","Tên","SL","Giá","Thành tiền"}, 0);
-            JTable itemsTable = new JTable(itemsModel);
-            win.getContentPane().add(new JScrollPane(itemsTable), BorderLayout.CENTER);
+            dlg.pack();
+            dlg.setLocationRelativeTo(this);
 
-            // Bottom panel with add item, total, save/close
-            JPanel bottom = new JPanel(new BorderLayout());
-            JPanel buttons = new JPanel();
-            JButton addItem = new JButton("Thêm mặt hàng");
-            JButton saveClose = new JButton("Lưu và đóng");
-            buttons.add(addItem);
-            buttons.add(saveClose);
-            bottom.add(buttons, BorderLayout.WEST);
-
-            JLabel totalLabel = new JLabel("Tổng: 0");
-            totalLabel.setBorder(BorderFactory.createEmptyBorder(6,6,6,6));
-            bottom.add(totalLabel, BorderLayout.EAST);
-            win.getContentPane().add(bottom, BorderLayout.SOUTH);
-
-            // Helper to recalc total and push to main orderModel
-            Runnable recalcTotal = () -> {
-                long total = 0;
-                for (int r = 0; r < itemsModel.getRowCount(); r++) {
-                    Object v = itemsModel.getValueAt(r, 4);
-                    if (v instanceof Number) total += ((Number) v).longValue();
-                    else {
-                        try { total += Long.parseLong(v.toString()); } catch (Exception ex) {}
+            chooser.addTableSelectionListener(table -> {
+                SwingUtilities.invokeLater(() -> {
+                    // FETCH FRESH STATUS FROM DB before creating order
+                    try {
+                        BanDAO dao = new BanDAO();
+                        Ban fresh = dao.layTheoId(table.maBan);
+                        String status = fresh != null ? fresh.getTrangThai() : table.status;
+                        
+                        if ("OCCUPIED".equalsIgnoreCase(status) 
+                            || "RESERVED".equalsIgnoreCase(status) 
+                            || "MAINTENANCE".equalsIgnoreCase(status)) {
+                            String message;
+                            if ("OCCUPIED".equalsIgnoreCase(status)) {
+                                message = "Bàn " + table.name + " đang được sử dụng.";
+                            } else if ("RESERVED".equalsIgnoreCase(status)) {
+                                message = "Bàn " + table.name + " đã được đặt trước.";
+                            } else {
+                                message = "Bàn " + table.name + " đang được bảo trì.";
+                            }
+                            JOptionPane.showMessageDialog(dlg, message, "Bàn không có sẵn", JOptionPane.WARNING_MESSAGE);
+                            return;
+                        }
+                    } catch (Exception ex) {
+                        ex.printStackTrace();
+                        JOptionPane.showMessageDialog(dlg, "Lỗi kiểm tra trạng thái bàn.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                        return;
                     }
-                }
-                String totalStr = String.valueOf(total);
-                totalLabel.setText("Tổng: " + totalStr);
-                // update main orderModel total column
-                if (orderRowIndex >= 0 && orderRowIndex < orderModel.getRowCount()) {
-                    orderModel.setValueAt(totalStr, orderRowIndex, 3);
-                }
-            };
 
-            addItem.addActionListener(ae -> {
-                String code = JOptionPane.showInputDialog(win, "Mã mặt hàng:", "Thêm mặt hàng", JOptionPane.PLAIN_MESSAGE);
-                if (code == null) return;
-                String name = JOptionPane.showInputDialog(win, "Tên mặt hàng:", "", JOptionPane.PLAIN_MESSAGE);
-                if (name == null) return;
-                String qtyS = JOptionPane.showInputDialog(win, "Số lượng:", "1");
-                if (qtyS == null) return;
-                String priceS = JOptionPane.showInputDialog(win, "Đơn giá (số nguyên):", "0");
-                if (priceS == null) return;
-                try {
-                    int qty = Integer.parseInt(qtyS);
-                    long price = Long.parseLong(priceS);
-                    long line = qty * price;
-                    itemsModel.addRow(new Object[] {code, name, qty, price, line});
-                    recalcTotal.run();
-                } catch (NumberFormatException ex) {
-                    JOptionPane.showMessageDialog(win, "Giá trị số không hợp lệ.", "Lỗi", JOptionPane.ERROR_MESSAGE);
-                }
+                    int ans = JOptionPane.showConfirmDialog(dlg,
+                            "Xác nhận chọn bàn " + table.name + "?",
+                            "Xác nhận chọn bàn",
+                            JOptionPane.YES_NO_OPTION);
+                    if (ans == JOptionPane.YES_OPTION) {
+                        dlg.dispose();
+
+                        // Prompt for number of people using the same logic as GiaoDienKhuVucBan
+                        Integer soNguoi = promptForSoNguoi();
+                        
+                        // Update table status through model with English ENUM value (stored in DB)
+                        // but TableModel will handle display as Vietnamese
+                        CapNhat.this.tableModel.setStatus(table, "OCCUPIED");
+                        if (soNguoi != null) {
+                            table.setSoNguoi(soNguoi);
+                            CapNhat.this.tableModel.updateSoNguoi(table, soNguoi);
+                        }
+
+                        // Create DonHang and ChiTietDonHang in DB
+                        createAndSaveDonHang(table, soNguoi);
+                    }
+                });
             });
 
-            saveClose.addActionListener(ae -> win.dispose());
+            dlg.setVisible(true);
+        }
 
-            win.pack();
-            win.setLocationRelativeTo(this);
-            win.setVisible(true);
+        private void refreshTableStatusesFromDB() {
+            try {
+                BanDAO banDAO = new BanDAO();
+                List<Ban> bans = banDAO.layHet();
+                for (Ban ban : bans) {
+                    // Find the corresponding CafeTable in tableModel and update its status
+                    // tableModel.tables contains all CafeTable objects
+                    for (GiaoDienKhuVucBan.CafeTable table : tableModel.getTables()) {
+                        if (table.maBan == ban.getMaBan()) {
+                            table.status = ban.getTrangThai(); // trangThai is already in English ENUM from DAO
+                            table.maDonHang = String.valueOf(ban.getMaDonHang());
+                            table.capNhatCuoi = ban.getCapNhatCuoi();
+                            if (ban.getSoNguoi() != null) {
+                                table.setSoNguoi(ban.getSoNguoi());
+                            }
+                            break;
+                        }
+                    }
+                }
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+        }
+
+        private Integer promptForSoNguoi() {
+            // Exact dialog requested: loop until valid or cancelled
+            while (true) {
+                String input = JOptionPane.showInputDialog(OrderPanel.this, "Số người? (bỏ trống nếu không rõ)");
+                if (input == null) {
+                    return null; // user cancelled
+                }
+                String trimmed = input.trim();
+                if (trimmed.isEmpty()) {
+                    return null; // user left blank (valid)
+                }
+                try {
+                    int v = Integer.parseInt(trimmed);
+                    if (v >= 1) return v;
+                    else JOptionPane.showMessageDialog(OrderPanel.this, "Số người phải lớn hơn hoặc bằng 1.", "Lỗi nhập", JOptionPane.ERROR_MESSAGE);
+                } catch (NumberFormatException ex) {
+                    JOptionPane.showMessageDialog(OrderPanel.this, "Vui lòng nhập số nguyên hợp lệ hoặc để trống.", "Lỗi nhập", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        }
+
+        private void createAndSaveDonHang(GiaoDienKhuVucBan.CafeTable table, Integer soNguoi) {
+            try {
+                // Get active tax (dangApDung = true)
+                ThueDAO thueDAO = new ThueDAO();
+                List<Thue> allThues = thueDAO.layHet();
+                Thue activeTax = null;
+                for (Thue t : allThues) {
+                    if (t.isDangApDung()) {
+                        activeTax = t;
+                        break;
+                    }
+                }
+
+                // Create DonHang entity
+                DonHang donHang = new DonHang();
+                donHang.setMaBan((int)table.maBan);
+                donHang.setTrangThai("dangMo");
+
+                // Calculate total from order items
+                BigDecimal total = BigDecimal.ZERO;
+                for (int r = 0; r < orderItemsModel.getRowCount(); r++) {
+                    Object v = orderItemsModel.getValueAt(r, 3);
+                    if (v instanceof BigDecimal) total = total.add((BigDecimal) v);
+                    else if (v instanceof Number) total = total.add(BigDecimal.valueOf(((Number) v).longValue()));
+                    else {
+                        try { total = total.add(new BigDecimal(v.toString())); } catch (Exception ex) {}
+                    }
+                }
+                
+                // Calculate tax if active tax exists
+                BigDecimal tienThue = BigDecimal.ZERO;
+                if (activeTax != null) {
+                    tienThue = total.multiply(activeTax.getTyLe()).divide(BigDecimal.valueOf(100));
+                }
+                
+                // Calculate final total with tax
+                BigDecimal tongCuoi = total.add(tienThue);
+                
+                // Set both tongTien and tongCuoi (tongTien is required by DB, tongCuoi is the final after discount/tax)
+                donHang.setTongTien(total);
+                donHang.setTienThue(tienThue);
+                donHang.setTongCuoi(tongCuoi);
+
+                // Save DonHang
+                DonHangDAO donHangDAO = new DonHangDAO();
+                boolean ok = donHangDAO.them(donHang);
+                if (!ok) {
+                    JOptionPane.showMessageDialog(OrderPanel.this, "Lỗi tạo đơn hàng.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+
+                int maDonHang = donHang.getMaDonHang();
+
+                // Create ChiTietDonHang entries for each item and update TonKho
+                ChiTietDonHangDAO chiTietDAO = new ChiTietDonHangDAO();
+                TonKhoDAO tonKhoDAO = new TonKhoDAO();
+                
+                for (int r = 0; r < orderItemsModel.getRowCount(); r++) {
+                    String tenMon = (String) orderItemsModel.getValueAt(r, 0);
+                    BigDecimal giaBan = (BigDecimal) orderItemsModel.getValueAt(r, 1);
+                    int soLuong = (int) orderItemsModel.getValueAt(r, 2);
+
+                    // Find maMon by tenMon
+                    int maMon = -1;
+                    for (Map.Entry<Integer, Mon> entry : monCache.entrySet()) {
+                        if (entry.getValue().getTenMon().equals(tenMon)) {
+                            maMon = entry.getKey();
+                            break;
+                        }
+                    }
+
+                    if (maMon > 0) {
+                        ChiTietDonHang chiTiet = new ChiTietDonHang();
+                        chiTiet.setMaDonHang(maDonHang);
+                        chiTiet.setMaMon(maMon);
+                        chiTiet.setSoLuong(soLuong);
+                        chiTiet.setGiaBan(giaBan);
+                        chiTiet.setThanhTien(giaBan.multiply(BigDecimal.valueOf(soLuong)));
+                        
+                        // Set tax for this line item if active tax exists
+                        if (activeTax != null) {
+                            chiTiet.setMaThue(activeTax.getMaThue());
+                            BigDecimal lineThue = chiTiet.getThanhTien().multiply(activeTax.getTyLe()).divide(BigDecimal.valueOf(100));
+                            chiTiet.setTienThue(lineThue);
+                        }
+                        
+                        chiTietDAO.them(chiTiet);
+                        
+                        // Update TonKho: reduce soLuong by soLuong of this order
+                        TonKho tonKho = tonKhoDAO.layTheoMaMon(maMon);
+                        if (tonKho != null) {
+                            BigDecimal newSoLuong = tonKho.getSoLuong().subtract(BigDecimal.valueOf(soLuong));
+                            tonKho.setSoLuong(newSoLuong);
+                            tonKhoDAO.capNhat(tonKho);
+                        }
+                    }
+                }
+
+                JOptionPane.showMessageDialog(OrderPanel.this,
+                        "Đơn hàng #" + maDonHang + " đã được tạo cho bàn " + table.name + ".\n" +
+                        "Tổng mục: " + orderItemsModel.getRowCount(),
+                        "Thành công",
+                        JOptionPane.INFORMATION_MESSAGE);
+
+                clearOrderItems();
+            } catch (Exception ex) {
+                ex.printStackTrace();
+                JOptionPane.showMessageDialog(OrderPanel.this, "Lỗi lưu đơn hàng: " + ex.getMessage(), "Lỗi", JOptionPane.ERROR_MESSAGE);
+            }
         }
     }
 
@@ -217,20 +473,6 @@ public class CapNhat extends JPanel {
             setLayout(new BorderLayout());
             // Only show the TableLayoutPanel as the full content using the shared model
             add(new GiaoDienKhuVucBan(GiaoDienKhuVucBan.Mode.TRANGTHAI_MODE, CapNhat.this.tableModel), BorderLayout.CENTER);
-        }
-    }
-
-    static class PriceStockPanel extends JPanel {
-        public PriceStockPanel() {
-            setLayout(new BorderLayout(8,8));
-            String[] cols = {"Mã", "Tên", "Giá", "Tồn kho"};
-            Object[][] rows = { {"P001","Cà phê sữa","25000","20"} };
-            JTable t = new JTable(rows, cols);
-            add(new JScrollPane(t), BorderLayout.CENTER);
-            JPanel p = new JPanel();
-            p.add(new JButton("Cập nhật giá"));
-            p.add(new JButton("Cập nhật tồn kho"));
-            add(p, BorderLayout.SOUTH);
         }
     }
 }

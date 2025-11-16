@@ -10,6 +10,11 @@ public class KhachHang {
     private Timestamp ngayTao;
 
     public KhachHang() {}
+    
+    public static String normalizePhoneNumber(String phone) {
+        if (phone == null) return "";
+        return phone.replaceAll("\\D", "");
+    }
 
     public int getMaKhachHang() { return maKhachHang; }
     public void setMaKhachHang(int maKhachHang) { this.maKhachHang = maKhachHang; }

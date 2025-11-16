@@ -44,6 +44,27 @@ public class KhachHangDAO {
         return null;
     }
 
+    public KhachHang layTheoSoDienThoai(String soDienThoai) {
+        if (soDienThoai == null || soDienThoai.trim().isEmpty()) return null;
+        String normalized = KhachHang.normalizePhoneNumber(soDienThoai);
+        String sql = "SELECT maKhachHang, hoTen, soDienThoai, hangThanhVien, ngayTao FROM khachHang WHERE REPLACE(REPLACE(REPLACE(soDienThoai, ' ', ''), '-', ''), '+', '') = ?";
+        try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, normalized);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    KhachHang k = new KhachHang();
+                    k.setMaKhachHang(rs.getInt("maKhachHang"));
+                    k.setHoTen(rs.getString("hoTen"));
+                    k.setSoDienThoai(rs.getString("soDienThoai"));
+                    k.setHangThanhVien(resolveHangThanhVien(rs.getString("hangThanhVien")));
+                    k.setNgayTao(rs.getTimestamp("ngayTao"));
+                    return k;
+                }
+            }
+        } catch (SQLException ex) { ex.printStackTrace(); }
+        return null;
+    }
+
     public boolean them(KhachHang k) {
         String sql = "INSERT INTO khachHang(hoTen, soDienThoai, hangThanhVien) VALUES(?, ?, ?)";
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
