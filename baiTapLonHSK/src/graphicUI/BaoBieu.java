@@ -1,8 +1,10 @@
 package graphicUI;
 
+import dao.ChiTietDonHangDAO;
 import dao.DonHangDAO;
 import dao.KhachHangDAO;
 import dao.TonKhoDAO;
+import entity.ChiTietDonHang;
 import entity.DonHang;
 import entity.KhachHang;
 import entity.TonKho;
@@ -55,6 +57,7 @@ public class BaoBieu extends JPanel {
         private final DonHangDAO donHangDAO = new DonHangDAO();
         private final KhachHangDAO khachHangDAO = new KhachHangDAO();
         private final TonKhoDAO tonKhoDAO = new TonKhoDAO();
+        private final ChiTietDonHangDAO chiTietDonHangDAO = new ChiTietDonHangDAO();
         private final DefaultTableModel tableModel;
         private final JTable table;
         private final JComboBox<PeriodOption> periodCombo;
@@ -73,7 +76,7 @@ public class BaoBieu extends JPanel {
             setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
             tableModel = new DefaultTableModel(new Object[]{
-                    "Mã đơn", "Khách hàng", "SĐT", "Tổng tiền", "Giảm", "Thuế", "Tổng cuối", "Trạng thái", "Ngày tạo"
+                    "Mã đơn", "Khách hàng", "SĐT", "Tổng tiền", "Giảm", "Thuế", "Tổng cuối", "Giá nhập", "Trạng thái", "Ngày tạo"
             }, 0) {
                 @Override
                 public boolean isCellEditable(int row, int column) {
@@ -145,15 +148,12 @@ public class BaoBieu extends JPanel {
                 }
             }
 
-            refreshTable(filtered);
+            Map<Integer, BigDecimal> orderCostMap = calculateOrderCosts(filtered);
+            refreshTable(filtered, orderCostMap);
 
-            BigDecimal revenue = BigDecimal.ZERO;
-            for (DonHang order : filtered) {
-                if (order.getTongCuoi() != null) {
-                    revenue = revenue.add(order.getTongCuoi());
-                }
-            }
-            BigDecimal tonKhoCost = calculateTonKhoCost();
+            BigDecimal revenue = calculateRevenue(filtered);
+            BigDecimal tonKhoCost = orderCostMap.values().stream()
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
             BigDecimal profit = revenue.subtract(tonKhoCost);
 
             rangeLabel.setText("Khoảng thời gian: " + option.describeRange(range));
@@ -166,27 +166,69 @@ public class BaoBieu extends JPanel {
             }
         }
 
-        private BigDecimal calculateTonKhoCost() {
-            BigDecimal total = BigDecimal.ZERO;
+        private BigDecimal calculateRevenue(List<DonHang> orders) {
+            BigDecimal revenue = BigDecimal.ZERO;
+            for (DonHang order : orders) {
+                if (order.getTongTien() != null) {
+                    revenue = revenue.add(order.getTongTien());
+                }
+            }
+            return revenue;
+        }
+
+        private Map<Integer, BigDecimal> calculateOrderCosts(List<DonHang> orders) {
+            Map<Integer, BigDecimal> costByOrder = new HashMap<>();
+            if (orders.isEmpty()) {
+                return costByOrder;
+            }
+
+            Map<Integer, BigDecimal> giaNhapByMon = loadGiaNhapByMon();
+            for (DonHang order : orders) {
+                BigDecimal totalCost = BigDecimal.ZERO;
+                try {
+                    List<ChiTietDonHang> details = chiTietDonHangDAO.layTheoDonHang(order.getMaDonHang());
+                    for (ChiTietDonHang detail : details) {
+                        Integer maMon = detail.getMaMon();
+                        if (maMon == null) {
+                            continue;
+                        }
+                        BigDecimal giaNhap = giaNhapByMon.get(maMon);
+                        if (giaNhap == null) {
+                            continue;
+                        }
+                        BigDecimal soLuong = BigDecimal.valueOf(detail.getSoLuong());
+                        totalCost = totalCost.add(giaNhap.multiply(soLuong));
+                    }
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                }
+                costByOrder.put(order.getMaDonHang(), totalCost);
+            }
+            return costByOrder;
+        }
+
+        private Map<Integer, BigDecimal> loadGiaNhapByMon() {
+            Map<Integer, BigDecimal> giaNhapByMon = new HashMap<>();
             try {
                 List<TonKho> tonKhos = tonKhoDAO.layHet();
                 if (tonKhos != null) {
                     for (TonKho tk : tonKhos) {
                         if (tk.getGiaNhap() != null) {
-                            total = total.add(tk.getGiaNhap());
+                            giaNhapByMon.put(tk.getMaMon(), tk.getGiaNhap());
                         }
                     }
                 }
             } catch (Exception ex) {
                 ex.printStackTrace();
             }
-            return total;
+            return giaNhapByMon;
         }
 
-        private void refreshTable(List<DonHang> orders) {
+        private void refreshTable(List<DonHang> orders, Map<Integer, BigDecimal> orderCostMap) {
             tableModel.setRowCount(0);
             for (DonHang order : orders) {
                 KhachHang kh = order.getMaKhachHang() != null ? khachHangMap.get(order.getMaKhachHang()) : null;
+                BigDecimal giaNhapValue = orderCostMap.getOrDefault(order.getMaDonHang(), BigDecimal.ZERO);
                 tableModel.addRow(new Object[]{
                         order.getMaDonHang(),
                         kh != null ? kh.getHoTen() : "Khách lẻ",
@@ -195,6 +237,7 @@ public class BaoBieu extends JPanel {
                         formatCurrency(order.getTienGiam()),
                         formatCurrency(order.getTienThue()),
                         formatCurrency(order.getTongCuoi()),
+                        formatCurrency(giaNhapValue),
                         order.getTrangThai(),
                         formatTimestamp(order.getThoiGianTao())
                 });

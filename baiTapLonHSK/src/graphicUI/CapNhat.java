@@ -210,21 +210,54 @@ public class CapNhat extends JPanel {
                     return;
                 }
 
-                // Calculate line total
-                long lineTotal = qty * mon.getGiaBan().longValue();
+                int existingRow = findOrderRowByMon(maMon);
+                int existingQty = existingRow != -1 ? toInt(orderItemsModel.getValueAt(existingRow, 2)) : 0;
+                int updatedQty = existingQty + qty;
 
-                // Add to order items table
-                orderItemsModel.addRow(new Object[]{
-                        mon.getTenMon(),
-                        mon.getGiaBan(),
-                        qty,
-                        lineTotal
-                });
+                if (tonKho.getSoLuong().compareTo(BigDecimal.valueOf(updatedQty)) < 0) {
+                    JOptionPane.showMessageDialog(this, "Vượt quá số lượng hàng còn.", "Thông báo", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+
+                BigDecimal lineTotal = mon.getGiaBan().multiply(BigDecimal.valueOf(updatedQty));
+
+                if (existingRow != -1) {
+                    orderItemsModel.setValueAt(updatedQty, existingRow, 2);
+                    orderItemsModel.setValueAt(lineTotal, existingRow, 3);
+                } else {
+                    orderItemsModel.addRow(new Object[]{
+                            mon.getTenMon(),
+                            mon.getGiaBan(),
+                            qty,
+                            mon.getGiaBan().multiply(BigDecimal.valueOf(qty))
+                    });
+                }
 
                 qtyField.setText("1");
             } catch (NumberFormatException ex) {
                 JOptionPane.showMessageDialog(this, "Số Lượng phải là số nguyên.", "Lỗi", JOptionPane.ERROR_MESSAGE);
             }
+        }
+
+        private int findOrderRowByMon(int maMon) {
+            Mon mon = monCache.get(maMon);
+            if (mon == null) {
+                return -1;
+            }
+            String tenMon = mon.getTenMon();
+            for (int i = 0; i < orderItemsModel.getRowCount(); i++) {
+                if (tenMon.equals(orderItemsModel.getValueAt(i, 0))) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        private int toInt(Object value) {
+            if (value instanceof Number) {
+                return ((Number) value).intValue();
+            }
+            return Integer.parseInt(String.valueOf(value));
         }
 
         private void deleteItemFromOrder() {
