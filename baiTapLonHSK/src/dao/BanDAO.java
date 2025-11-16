@@ -92,10 +92,10 @@ public class BanDAO {
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(insertSql)) {
             for (components.GiaoDienKhuVucBan.CafeTable t : tables) {
                 if (t == null) continue;
-                // only use positive integer ids; skip takeaway (maBan==0)
                 if (t.maBan <= 0) continue;
                 ps.setInt(1, t.maBan);
-                ps.setString(2, toDbStatus("Trống"));
+                String initialStatus = t.status != null ? t.status : (t.isTakeaway ? "TAKEAWAY" : "Trống");
+                ps.setString(2, toDbStatus(initialStatus));
                 ps.addBatch();
             }
             ps.executeBatch();
@@ -181,7 +181,7 @@ public class BanDAO {
             case "MAINTENANCE":
                 return "Bảo trì";
             case "TAKEAWAY":
-                return "Takeaway";
+                return "Mang đi";
             default:
                 return dbStatus;
         }

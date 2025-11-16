@@ -65,6 +65,7 @@ public class XuLi extends JPanel {
         private final DefaultTableModel ordersModel;
         private final JTable ordersTable;
         private final GiaoDienKhuVucBan tableLayout;
+        private boolean filterTakeawayOnly = false;
 
         // Right side: payment section
         private final DefaultTableModel productModel;
@@ -115,7 +116,10 @@ public class XuLi extends JPanel {
             ordersTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 
             JButton refreshOrdersBtn = new JButton("Tải lại");
-            refreshOrdersBtn.addActionListener(e -> reloadOrdersFromDatabase());
+            refreshOrdersBtn.addActionListener(e -> {
+                filterTakeawayOnly = false;
+                reloadOrdersFromDatabase();
+            });
 
             // Table layout panel in checkout mode (click should NOT change occupancy)
             // Use the shared model so this panel and others reflect the same table objects
@@ -299,6 +303,7 @@ public class XuLi extends JPanel {
             currentOrders.clear();
             clearOrderDisplay();
 
+            final boolean takeawayOnly = filterTakeawayOnly;
             new SwingWorker<List<DonHang>, Void>() {
                 @Override
                 protected List<DonHang> doInBackground() {
@@ -306,7 +311,8 @@ public class XuLi extends JPanel {
                     if (all == null) return List.of();
 
                     return all.stream()
-                              .filter(d -> "dangMo".equals(d.getTrangThai()))
+                              .filter(d -> d.getTrangThai() != null && d.getTrangThai().equalsIgnoreCase("dangMo"))
+                              .filter(d -> !takeawayOnly || isTakeawayOrder(d))
                               .toList();
                 }
 
@@ -338,6 +344,9 @@ public class XuLi extends JPanel {
         private String formatTableName(DonHang order) {
             if (order == null) return "";
             if (order.getMaBan() != null) {
+                if (isTakeawayOrder(order)) {
+                    return "Mang đi";
+                }
                 return "Bàn " + order.getMaBan();
             }
             if (order.getLoaiDon() != null) {
@@ -510,10 +519,26 @@ public class XuLi extends JPanel {
         }
 
         private void loadOrderFromTable(CafeTable t) {
-            if (t == null || t.maBan <= 0) {
+            if (t == null) {
+                JOptionPane.showMessageDialog(this, "Không xác định được bàn.",
+                        "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+
+            if (t.isTakeaway) {
+                showTakeawayOrdersOnly();
+                return;
+            }
+
+            if (t.maBan <= 0) {
                 JOptionPane.showMessageDialog(this, "Bàn này không liên kết với hóa đơn tại chỗ.",
                         "Thông báo", JOptionPane.INFORMATION_MESSAGE);
                 return;
+            }
+
+            if (filterTakeawayOnly) {
+                filterTakeawayOnly = false;
+                reloadOrdersFromDatabase();
             }
 
             new SwingWorker<DonHang, Void>() {
@@ -534,10 +559,11 @@ public class XuLi extends JPanel {
                     try {
                         DonHang dh = get();
                         if (dh != null) {
-                            loadByOrderId(dh.getMaDonHang());
+                            displayOrder(dh);
+                            selectOrderInTable(dh.getMaDonHang());
                         } else {
                             JOptionPane.showMessageDialog(PaymentPanel.this,
-                                "Chưa có hóa đơn nào gắn với bàn " + t.name + ".", 
+                                "Chưa có hóa đơn nào gắn với bàn " + t.name + ".",
                                 "Thông báo", JOptionPane.INFORMATION_MESSAGE);
                         }
                     } catch (Exception ex) {
@@ -547,6 +573,23 @@ public class XuLi extends JPanel {
                     }
                 }
             }.execute();
+        }
+
+        private void showTakeawayOrdersOnly() {
+            boolean alreadyFiltering = filterTakeawayOnly;
+            filterTakeawayOnly = true;
+            reloadOrdersFromDatabase();
+            if (!alreadyFiltering) {
+                JOptionPane.showMessageDialog(this,
+                        "Đang lọc danh sách hóa đơn theo các đơn mang đi đang mở.",
+                        "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+            }
+        }
+
+        private boolean isTakeawayOrder(DonHang order) {
+            return order != null
+                    && order.getMaBan() != null
+                    && order.getMaBan() == GiaoDienKhuVucBan.TAKEAWAY_TABLE_ID;
         }
 
         private void selectOrderInTable(int maDonHang) {

@@ -258,23 +258,22 @@ public class CapNhat extends JPanel {
 
             chooser.addTableSelectionListener(table -> {
                 SwingUtilities.invokeLater(() -> {
+                    if (table.isTakeaway) {
+                        dlg.dispose();
+                        handleTakeawayOrder(table);
+                        return;
+                    }
                     // FETCH FRESH STATUS FROM DB before creating order
                     try {
                         BanDAO dao = new BanDAO();
                         Ban fresh = dao.layTheoId(table.maBan);
                         String status = fresh != null ? fresh.getTrangThai() : table.status;
-                        
-                        if ("OCCUPIED".equalsIgnoreCase(status) 
-                            || "RESERVED".equalsIgnoreCase(status) 
-                            || "MAINTENANCE".equalsIgnoreCase(status)) {
-                            String message;
-                            if ("OCCUPIED".equalsIgnoreCase(status)) {
-                                message = "Bàn " + table.name + " đang được sử dụng.";
-                            } else if ("RESERVED".equalsIgnoreCase(status)) {
-                                message = "Bàn " + table.name + " đã được đặt trước.";
-                            } else {
-                                message = "Bàn " + table.name + " đang được bảo trì.";
-                            }
+                        String normalized = status != null ? status.trim().toUpperCase(Locale.ROOT) : "FREE";
+
+                        if (!"FREE".equals(normalized) && !"RESERVED".equals(normalized)) {
+                            String message = "Bàn " + table.name + " đang ở trạng thái "
+                                    + translateStatusForDisplay(normalized)
+                                    + ".\nChỉ có thể tạo đơn cho bàn Trống hoặc Đặt trước.";
                             JOptionPane.showMessageDialog(dlg, message, "Bàn không có sẵn", JOptionPane.WARNING_MESSAGE);
                             return;
                         }
@@ -309,6 +308,23 @@ public class CapNhat extends JPanel {
             });
 
             dlg.setVisible(true);
+        }
+
+        private void handleTakeawayOrder(GiaoDienKhuVucBan.CafeTable takeaway) {
+            int ans = JOptionPane.showConfirmDialog(OrderPanel.this,
+                    "Tạo đơn mang đi mới?",
+                    "Xác nhận",
+                    JOptionPane.YES_NO_OPTION);
+            if (ans == JOptionPane.YES_OPTION) {
+                if (takeaway != null) {
+                    createAndSaveDonHang(takeaway, null);
+                } else {
+                    JOptionPane.showMessageDialog(OrderPanel.this,
+                            "Không tìm thấy bàn mang đi trong sơ đồ.",
+                            "Lỗi",
+                            JOptionPane.ERROR_MESSAGE);
+                }
+            }
         }
 
         private void refreshTableStatusesFromDB() {
@@ -373,6 +389,7 @@ public class CapNhat extends JPanel {
                 DonHang donHang = new DonHang();
                 donHang.setMaBan((int)table.maBan);
                 donHang.setTrangThai("dangMo");
+                donHang.setLoaiDon(table.isTakeaway ? "mangVe" : "taiCho");
 
                 // Calculate total from order items
                 BigDecimal total = BigDecimal.ZERO;
@@ -466,13 +483,33 @@ public class CapNhat extends JPanel {
                 JOptionPane.showMessageDialog(OrderPanel.this, "Lỗi lưu đơn hàng: " + ex.getMessage(), "Lỗi", JOptionPane.ERROR_MESSAGE);
             }
         }
+
+        private String translateStatusForDisplay(String dbStatus) {
+            if (dbStatus == null) return "Không xác định";
+            switch (dbStatus.toUpperCase(Locale.ROOT)) {
+                case "FREE":
+                    return "Trống";
+                case "OCCUPIED":
+                    return "Đang sử dụng";
+                case "RESERVED":
+                    return "Đặt trước";
+                case "MAINTENANCE":
+                    return "Bảo trì";
+                case "TAKEAWAY":
+                    return "Mang đi";
+                default:
+                    return dbStatus;
+            }
+        }
     }
 
     class TableStatusPanel extends JPanel {
         public TableStatusPanel() {
             setLayout(new BorderLayout());
             // Only show the TableLayoutPanel as the full content using the shared model
-            add(new GiaoDienKhuVucBan(GiaoDienKhuVucBan.Mode.TRANGTHAI_MODE, CapNhat.this.tableModel), BorderLayout.CENTER);
+            GiaoDienKhuVucBan layout = new GiaoDienKhuVucBan(GiaoDienKhuVucBan.Mode.TRANGTHAI_MODE, CapNhat.this.tableModel);
+            layout.setTakeawayOrderPanelSupplier(() -> CapNhat.this.new OrderPanel());
+            add(layout, BorderLayout.CENTER);
         }
     }
 }
