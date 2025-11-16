@@ -158,6 +158,14 @@ public class GiaoDienKhuVucBan extends JPanel {
                     tt.setTrangThai(newStatus);
                     // include UI-level soNguoi in persistence
                     tt.setSoNguoi(t.getSoNguoi());
+                    if (t.maDonHang != null) {
+                        try {
+                            String trimmed = t.maDonHang.trim();
+                            tt.setMaDonHang(trimmed.isEmpty() ? null : Integer.parseInt(trimmed));
+                        } catch (NumberFormatException ignore) {
+                            tt.setMaDonHang(null);
+                        }
+                    }
                     boolean ok = dao.capNhat(tt);
                     if (!ok) {
                         dao.them(tt);
@@ -287,6 +295,12 @@ public class GiaoDienKhuVucBan extends JPanel {
     // track a pending move (source table) when user selects "Chuyển bàn" in STATUS_MODE
     private CafeTable pendingMoveSource = null;
 
+    private void resetPendingTransferState() {
+        pendingMoveSource = null;
+        setCursor(Cursor.getDefaultCursor());
+        setMode(Mode.TRANGTHAI_MODE);
+    }
+
     // NOTE: Require injection of a shared TableModel. The constructors that created
     // isolated models have been removed to prevent accidental divergent views.
     public GiaoDienKhuVucBan(Mode mode, TableModel model) {
@@ -332,22 +346,37 @@ public class GiaoDienKhuVucBan extends JPanel {
                                 JOptionPane.showMessageDialog(GiaoDienKhuVucBan.this, "Không thể chuyển đến bàn này (Takeaway hoặc đang bảo trì).", "Lỗi", JOptionPane.ERROR_MESSAGE);
                                 return;
                             }
+                            if (t.maBan <= 0) {
+                                JOptionPane.showMessageDialog(GiaoDienKhuVucBan.this,
+                                        "Bàn này chưa gắn mã bàn hợp lệ.",
+                                        "Chuyển bàn",
+                                        JOptionPane.WARNING_MESSAGE);
+                                return;
+                            }
+                            String destStatus = t.status != null ? t.status.trim().toUpperCase(Locale.ROOT) : "FREE";
+                            if (!"FREE".equals(destStatus) && !"RESERVED".equals(destStatus)) {
+                                JOptionPane.showMessageDialog(GiaoDienKhuVucBan.this,
+                                        "Bàn " + t.name + " đang bận. Hãy chọn bàn trống hoặc đã đặt trước.",
+                                        "Chuyển bàn",
+                                        JOptionPane.WARNING_MESSAGE);
+                                return;
+                            }
+                            Integer destOpenOrder = findOpenOrderIdForTable(t);
+                            if (destOpenOrder != null) {
+                                JOptionPane.showMessageDialog(GiaoDienKhuVucBan.this,
+                                        "Bàn " + t.name + " đang gắn hóa đơn #" + destOpenOrder + ".",
+                                        "Chuyển bàn",
+                                        JOptionPane.WARNING_MESSAGE);
+                                return;
+                            }
                             int ans = JOptionPane.showConfirmDialog(GiaoDienKhuVucBan.this,
                                     "Xác nhận chuyển đơn từ " + pendingMoveSource.name + " sang " + t.name + "?",
                                     "Xác nhận chuyển bàn",
                                     JOptionPane.YES_NO_OPTION);
                             if (ans == JOptionPane.YES_OPTION) {
-                                tableModel.setStatus(t, "OCCUPIED");
-                                tableModel.setStatus(pendingMoveSource, "FREE");
-                                notifySelectionListeners(t);
-                                pendingMoveSource = null;
-                                setCursor(Cursor.getDefaultCursor());
-                                setMode(Mode.TRANGTHAI_MODE);
-                                repaint();
+                                performTableTransfer(pendingMoveSource, t);
                             } else {
-                                pendingMoveSource = null;
-                                setCursor(Cursor.getDefaultCursor());
-                                setMode(Mode.TRANGTHAI_MODE);
+                                resetPendingTransferState();
                             }
 
                             // handled this click, stop processing
@@ -777,6 +806,102 @@ public class GiaoDienKhuVucBan extends JPanel {
                     JOptionPane.ERROR_MESSAGE);
             return null;
         }
+    }
+
+    private void performTableTransfer(CafeTable source, CafeTable destination) {
+        if (source == null || destination == null) {
+            resetPendingTransferState();
+            return;
+        }
+
+        resetPendingTransferState();
+
+        if (destination.maBan <= 0) {
+            JOptionPane.showMessageDialog(this,
+                    "Bàn đích chưa được gắn mã bàn hợp lệ.",
+                    "Chuyển bàn",
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        Integer sourceOrderId = findOpenOrderIdForTable(source);
+        if (sourceOrderId == null) {
+            JOptionPane.showMessageDialog(this,
+                    "Không tìm thấy hóa đơn đang mở của " + source.name + ".",
+                    "Chuyển bàn",
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        final int orderId = sourceOrderId;
+        final Integer peopleCount = source.getSoNguoi();
+
+        new SwingWorker<Boolean, Void>() {
+            @Override
+            protected Boolean doInBackground() {
+                try {
+                    DonHangDAO donHangDAO = new DonHangDAO();
+                    DonHang order = donHangDAO.layTheoId(orderId);
+                    if (order == null) {
+                        return false;
+                    }
+                    order.setMaBan(destination.maBan);
+                    if (!donHangDAO.capNhat(order)) {
+                        return false;
+                    }
+
+                    BanDAO banDAO = new BanDAO();
+
+                    Ban destBan = new Ban();
+                    destBan.setMaBan(destination.maBan);
+                    destBan.setTrangThai("OCCUPIED");
+                    destBan.setMaDonHang(orderId);
+                    destBan.setSoNguoi(peopleCount);
+                    banDAO.capNhat(destBan);
+
+                    Ban srcBan = new Ban();
+                    srcBan.setMaBan(source.maBan);
+                    srcBan.setTrangThai("FREE");
+                    srcBan.setMaDonHang(null);
+                    srcBan.setSoNguoi(null);
+                    banDAO.capNhat(srcBan);
+
+                    return true;
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                    return false;
+                }
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    Boolean ok = get();
+                    if (Boolean.TRUE.equals(ok)) {
+                        destination.maDonHang = String.valueOf(orderId);
+                        destination.setSoNguoi(peopleCount);
+                        tableModel.setStatus(destination, "OCCUPIED");
+                        source.maDonHang = null;
+                        source.setSoNguoi(null);
+                        tableModel.setStatus(source, "FREE");
+                        JOptionPane.showMessageDialog(GiaoDienKhuVucBan.this,
+                                "Đã chuyển hóa đơn #" + orderId + " sang " + destination.name + ".",
+                                "Chuyển bàn",
+                                JOptionPane.INFORMATION_MESSAGE);
+                    } else {
+                        JOptionPane.showMessageDialog(GiaoDienKhuVucBan.this,
+                                "Không thể chuyển hóa đơn. Vui lòng thử lại.",
+                                "Chuyển bàn",
+                                JOptionPane.ERROR_MESSAGE);
+                    }
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(GiaoDienKhuVucBan.this,
+                            "Không thể chuyển hóa đơn: " + ex.getMessage(),
+                            "Chuyển bàn",
+                            JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        }.execute();
     }
 
     private boolean isPaidOrder(DonHang order) {
