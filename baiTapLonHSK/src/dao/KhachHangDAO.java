@@ -17,7 +17,7 @@ public class KhachHangDAO {
                 k.setMaKhachHang(rs.getInt("maKhachHang"));
                 k.setHoTen(rs.getString("hoTen"));
                 k.setSoDienThoai(rs.getString("soDienThoai"));
-                k.setHangThanhVien(rs.getString("hangThanhVien"));
+                k.setHangThanhVien(resolveHangThanhVien(rs.getString("hangThanhVien")));
                 k.setNgayTao(rs.getTimestamp("ngayTao"));
                 res.add(k);
             }
@@ -35,7 +35,7 @@ public class KhachHangDAO {
                     k.setMaKhachHang(rs.getInt("maKhachHang"));
                     k.setHoTen(rs.getString("hoTen"));
                     k.setSoDienThoai(rs.getString("soDienThoai"));
-                    k.setHangThanhVien(rs.getString("hangThanhVien"));
+                    k.setHangThanhVien(resolveHangThanhVien(rs.getString("hangThanhVien")));
                     k.setNgayTao(rs.getTimestamp("ngayTao"));
                     return k;
                 }
@@ -49,7 +49,7 @@ public class KhachHangDAO {
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, k.getHoTen());
             ps.setString(2, k.getSoDienThoai());
-            ps.setString(3, k.getHangThanhVien());
+            ps.setString(3, resolveHangThanhVien(k.getHangThanhVien()));
             int rows = ps.executeUpdate();
             if (rows > 0) {
                 try (ResultSet keys = ps.getGeneratedKeys()) {
@@ -68,7 +68,7 @@ public class KhachHangDAO {
         try (Connection c = DBConnection.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, k.getHoTen());
             ps.setString(2, k.getSoDienThoai());
-            ps.setString(3, k.getHangThanhVien());
+            ps.setString(3, resolveHangThanhVien(k.getHangThanhVien()));
             ps.setInt(4, k.getMaKhachHang());
             return ps.executeUpdate() > 0;
         } catch (SQLException ex) { ex.printStackTrace(); return false; }
@@ -80,5 +80,12 @@ public class KhachHangDAO {
             ps.setInt(1, maKhachHang);
             return ps.executeUpdate() > 0;
         } catch (SQLException ex) { ex.printStackTrace(); return false; }
+    }
+
+    private String resolveHangThanhVien(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return "dong";
+        }
+        return value;
     }
 }

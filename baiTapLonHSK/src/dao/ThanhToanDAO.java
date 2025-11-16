@@ -42,7 +42,7 @@ public class ThanhToanDAO {
             ps.setInt(1, t.getMaDonHang());
             ps.setString(2, t.getHinhThuc());
             ps.setBigDecimal(3, t.getSoTien());
-            ps.setTimestamp(4, t.getThoiGian());
+            ps.setTimestamp(4, resolveTimestamp(t.getThoiGian()));
             int rows = ps.executeUpdate();
             if (rows > 0) {
                 try (ResultSet keys = ps.getGeneratedKeys()) {
@@ -65,7 +65,7 @@ public class ThanhToanDAO {
             ps.setInt(1, t.getMaDonHang());
             ps.setString(2, t.getHinhThuc());
             ps.setBigDecimal(3, t.getSoTien());
-            ps.setTimestamp(4, t.getThoiGian());
+            ps.setTimestamp(4, resolveTimestamp(t.getThoiGian()));
             ps.setInt(5, t.getMaThanhToan());
             return ps.executeUpdate() > 0;
         } catch (SQLException ex) {
@@ -93,5 +93,9 @@ public class ThanhToanDAO {
         t.setSoTien(rs.getBigDecimal("soTien"));
         t.setThoiGian(rs.getTimestamp("thoiGian"));
         return t;
+    }
+
+    private Timestamp resolveTimestamp(Timestamp value) {
+        return value != null ? value : new Timestamp(System.currentTimeMillis());
     }
 }

@@ -4,6 +4,7 @@ import connectDB.DBConnection;
 import entity.ChiTietDonHang;
 import entity.Mon;
 
+import java.math.BigDecimal;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -46,7 +47,7 @@ public class ChiTietDonHangDAO {
             ps.setBigDecimal(4, ct.getGiaBan());
             ps.setBigDecimal(5, ct.getThanhTien());
             setNullableInt(ps, 6, ct.getMaThue());
-            ps.setBigDecimal(7, ct.getTienThue());
+            ps.setBigDecimal(7, nonNullCurrency(ct.getTienThue()));
             int rows = ps.executeUpdate();
             if (rows > 0) {
                 try (ResultSet keys = ps.getGeneratedKeys()) {
@@ -70,7 +71,7 @@ public class ChiTietDonHangDAO {
             ps.setBigDecimal(4, ct.getGiaBan());
             ps.setBigDecimal(5, ct.getThanhTien());
             setNullableInt(ps, 6, ct.getMaThue());
-            ps.setBigDecimal(7, ct.getTienThue());
+            ps.setBigDecimal(7, nonNullCurrency(ct.getTienThue()));
             ps.setInt(8, ct.getMaChiTiet());
             return ps.executeUpdate() > 0;
         } catch (SQLException ex) {
@@ -136,7 +137,7 @@ public class ChiTietDonHangDAO {
         ct.setThanhTien(rs.getBigDecimal("thanhTien"));
         int maThue = rs.getInt("maThue");
         ct.setMaThue(rs.wasNull() ? null : maThue);
-        ct.setTienThue(rs.getBigDecimal("tienThue"));
+        ct.setTienThue(nonNullCurrency(rs.getBigDecimal("tienThue")));
         return ct;
     }
 
@@ -146,5 +147,9 @@ public class ChiTietDonHangDAO {
         } else {
             ps.setNull(index, Types.INTEGER);
         }
+    }
+
+    private BigDecimal nonNullCurrency(BigDecimal value) {
+        return value != null ? value : BigDecimal.ZERO;
     }
 }
