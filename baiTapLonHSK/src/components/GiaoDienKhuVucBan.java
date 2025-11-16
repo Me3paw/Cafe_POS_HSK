@@ -431,7 +431,7 @@ public class GiaoDienKhuVucBan extends JPanel {
                         tableModel.updateSoNguoi(table, res.value);
                     }
                 } else if (choice == 1) {
-                    handleAddItemsForTable(table);
+                    openOrderEditorForTable(table, "Thêm món cho " + table.name);
                 } else if (choice == 2) {
                     showStatusManagementDialog(table);
                 }
@@ -452,7 +452,7 @@ public class GiaoDienKhuVucBan extends JPanel {
                             occupiedOptions[0]);
 
                     if (opt == 0) { // cập nhật đơn
-                        JOptionPane.showMessageDialog(GiaoDienKhuVucBan.this, "Mở cập nhật đơn cho " + table.name + " (placeholder)", "Cập nhật đơn", JOptionPane.INFORMATION_MESSAGE);
+                        openOrderEditorForTable(table, "Cập nhật đơn " + table.name);
                     } else if (opt == 1) { // cập nhật số người
                         InputResult res = promptForSoNguoiSimple();
                         if (!res.cancelled) {
@@ -527,7 +527,7 @@ public class GiaoDienKhuVucBan extends JPanel {
                 }
             }
 
-            private void handleAddItemsForTable(CafeTable table) {
+            private void openOrderEditorForTable(CafeTable table, String dialogTitle) {
                 if (table == null) {
                     return;
                 }
@@ -548,7 +548,8 @@ public class GiaoDienKhuVucBan extends JPanel {
                     return;
                 }
 
-                GiaoDienKhuVucBan.this.openExistingOrderPanel(maDon, "Thêm món cho " + table.name, null);
+                String title = dialogTitle != null ? dialogTitle : ("Thêm món cho " + table.name);
+                GiaoDienKhuVucBan.this.openExistingOrderPanel(maDon, title, null);
             }
 
             private InputResult promptForSoNguoiSimple() {
@@ -578,7 +579,6 @@ public class GiaoDienKhuVucBan extends JPanel {
                 if (res.cancelled) return; // user cancelled -> do not occupy
                 table.setSoNguoi(res.value);
                 tableModel.setStatus(table, "OCCUPIED");
-                System.out.println("Selected table for order: " + table.name);
                 notifySelectionListeners(table);
             }
         });

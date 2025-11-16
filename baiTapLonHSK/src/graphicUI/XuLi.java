@@ -9,8 +9,6 @@ import dao.*;
 import entity.*;
 
 import java.awt.*;
-import java.io.File;
-import java.io.PrintWriter;
 import java.math.BigDecimal;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
@@ -29,11 +27,9 @@ import java.util.function.Supplier;
  */
 public class XuLi extends JPanel {
     private JTabbedPane tabs;
-    private Component owner;
     private PaymentPanel paymentPanel; // hold a reference so other inner panels can access table layout
 
-    public XuLi(Component owner, GiaoDienKhuVucBan.TableModel tableModel) {
-        this.owner = owner;
+    public XuLi(GiaoDienKhuVucBan.TableModel tableModel) {
         setLayout(new BorderLayout());
         tabs = new JTabbedPane();
         paymentPanel = new PaymentPanel(tableModel);
@@ -667,28 +663,6 @@ public class XuLi extends JPanel {
                     .replaceAll("\\p{InCombiningDiacriticalMarks}+", "")
                     .toUpperCase(Locale.ROOT);
             return normalized.contains("PAID") || normalized.contains("THANHTOAN") || normalized.contains("HOANTAT");
-        }
-
-        private void updateTotalFromProducts() {
-            BigDecimal sum = BigDecimal.ZERO;
-            for (int i = 0; i < productModel.getRowCount(); i++) {
-                Object v = productModel.getValueAt(i, 4);
-                if (v instanceof BigDecimal) {
-                    sum = sum.add((BigDecimal) v);
-                } else if (v instanceof Number) {
-                    sum = sum.add(BigDecimal.valueOf(((Number) v).doubleValue()));
-                } else if (v != null) {
-                    try {
-                        String normalized = v.toString().replaceAll("[^0-9.-]", "");
-                        if (!normalized.isEmpty()) {
-                            sum = sum.add(new BigDecimal(normalized));
-                        }
-                    } catch (Exception ignored) {}
-                }
-            }
-            if (sum.compareTo(BigDecimal.ZERO) > 0) {
-                totalField.setText(formatCurrency(sum));
-            }
         }
 
         private String formatCurrency(BigDecimal value) {
