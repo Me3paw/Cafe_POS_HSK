@@ -24,6 +24,6 @@ public final class SessionContext {
     }
 
     public static boolean isAdmin() {
-        return currentUser != null && "admin".equalsIgnoreCase(currentUser.getVaiTro());
+        return currentUser != null && "quanLy".equalsIgnoreCase(currentUser.getVaiTro());
     }
 }

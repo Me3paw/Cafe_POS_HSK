@@ -787,6 +787,9 @@ public class XuLi extends JPanel {
         private final DefaultTableModel invoiceModel;
         private final DefaultTableModel detailModel;
         private final JTextArea noteArea = new JTextArea(3, 20);
+        private final DonHangDAO donHangDAO = new DonHangDAO();
+        private final BanDAO banDAO = new BanDAO();
+        private DonHang currentSelectedOrder = null;
 
         public RefundPanel() {
             setLayout(new BorderLayout(15, 15));
@@ -801,7 +804,7 @@ public class XuLi extends JPanel {
             // === Khu vực tìm kiếm hóa đơn ===
             JPanel searchPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
             searchPanel.setOpaque(false);
-            searchPanel.add(new JLabel("Tìm hóa đơn:"));
+            searchPanel.add(new JLabel("Tìm hóa đơn (Mã HĐ):"));
             searchPanel.add(searchField);
             JButton searchBtn = new JButton("Tìm");
             styleButton(searchBtn);
@@ -809,7 +812,7 @@ public class XuLi extends JPanel {
             add(searchPanel, BorderLayout.NORTH);
 
             // === Bảng danh sách hóa đơn ===
-            String[] invoiceCols = {"Mã hóa đơn", "Bàn", "Tổng tiền", "Ngày thanh toán"};
+            String[] invoiceCols = {"Mã hóa đơn", "Bàn", "Tổng tiền", "Trạng thái"};
             invoiceModel = new DefaultTableModel(invoiceCols, 0);
             invoiceTable = new JTable(invoiceModel);
             invoiceTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
@@ -861,23 +864,36 @@ public class XuLi extends JPanel {
         }
 
         private void searchInvoice() {
-            String query = searchField.getText().trim().toLowerCase();
+            String query = searchField.getText().trim();
             if (query.isEmpty()) {
-                JOptionPane.showMessageDialog(this, "Nhập mã hoặc từ khóa để tìm hóa đơn.", "Thông báo", JOptionPane.WARNING_MESSAGE);
+                JOptionPane.showMessageDialog(this, "Nhập mã hóa đơn để tìm kiếm.", "Thông báo", JOptionPane.WARNING_MESSAGE);
                 return;
             }
 
-            for (int i = 0; i < invoiceModel.getRowCount(); i++) {
-                String id = invoiceModel.getValueAt(i, 0).toString().toLowerCase();
-                if (id.contains(query)) {
-                    invoiceTable.setRowSelectionInterval(i, i);
-                    invoiceTable.scrollRectToVisible(invoiceTable.getCellRect(i, 0, true));
+            try {
+                int maDonHang = Integer.parseInt(query);
+                DonHang order = donHangDAO.layTheoId(maDonHang);
+                
+                if (order != null) {
+                    invoiceModel.setRowCount(0);
+                    String banInfo = order.getMaBan() != null ? "Bàn " + order.getMaBan() : "Mang đi";
+                    invoiceModel.addRow(new Object[]{
+                        order.getMaDonHang(),
+                        banInfo,
+                        order.getTongCuoi(),
+                        order.getTrangThai()
+                    });
+                    invoiceTable.setRowSelectionInterval(0, 0);
                     showInvoiceDetails();
-                    return;
+                } else {
+                    JOptionPane.showMessageDialog(this, "Không tìm thấy hóa đơn với mã: " + maDonHang, "Không tìm thấy", JOptionPane.INFORMATION_MESSAGE);
+                    invoiceModel.setRowCount(0);
+                    detailModel.setRowCount(0);
+                    currentSelectedOrder = null;
                 }
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(this, "Mã hóa đơn phải là số nguyên.", "Lỗi", JOptionPane.ERROR_MESSAGE);
             }
-
-            JOptionPane.showMessageDialog(this, "Không tìm thấy hóa đơn phù hợp.", "Kết quả tìm kiếm", JOptionPane.INFORMATION_MESSAGE);
         }
 
         private void showInvoiceDetails() {
@@ -885,13 +901,14 @@ public class XuLi extends JPanel {
             if (row < 0) return;
             detailModel.setRowCount(0);
 
-            String id = invoiceModel.getValueAt(row, 0).toString();
             try {
-                DonHangDAO donHangDAO = new DonHangDAO();
-                DonHang order = donHangDAO.layTheoId(Integer.parseInt(id));
-                if (order != null) {
+                String idStr = invoiceModel.getValueAt(row, 0).toString();
+                int maDonHang = Integer.parseInt(idStr);
+                currentSelectedOrder = donHangDAO.layTheoId(maDonHang);
+                
+                if (currentSelectedOrder != null) {
                     ChiTietDonHangDAO chiTietDAO = new ChiTietDonHangDAO();
-                    List<ChiTietDonHang> details = chiTietDAO.layTheoDonHang(order.getMaDonHang());
+                    List<ChiTietDonHang> details = chiTietDAO.layTheoDonHang(currentSelectedOrder.getMaDonHang());
                     if (details != null) {
                         for (ChiTietDonHang ct : details) {
                             String tenMon = ct.getMon() != null && ct.getMon().getTenMon() != null
@@ -907,8 +924,7 @@ public class XuLi extends JPanel {
         }
 
         private void processRefund() {
-            int selectedRow = invoiceTable.getSelectedRow();
-            if (selectedRow < 0) {
+            if (currentSelectedOrder == null) {
                 JOptionPane.showMessageDialog(this, "Vui lòng chọn hóa đơn cần hoàn tiền!", "Thông báo", JOptionPane.WARNING_MESSAGE);
                 return;
             }
@@ -919,17 +935,66 @@ public class XuLi extends JPanel {
                 if (opt != JOptionPane.YES_OPTION) return;
             }
 
-            String id = invoiceModel.getValueAt(selectedRow, 0).toString();
             int confirm = JOptionPane.showConfirmDialog(this,
-                    "Xác nhận hoàn tiền cho hóa đơn " + id + "?",
+                    "Xác nhận hoàn tiền cho hóa đơn " + currentSelectedOrder.getMaDonHang() + "?",
                     "Xác nhận hoàn tiền", JOptionPane.YES_NO_OPTION);
 
             if (confirm == JOptionPane.YES_OPTION) {
-                JOptionPane.showMessageDialog(this,
-                        "Hoàn tiền thành công cho hóa đơn " + id + "!",
-                        "Thành công", JOptionPane.INFORMATION_MESSAGE);
-                noteArea.setText("");
-                detailModel.setRowCount(0);
+                new SwingWorker<Boolean, Void>() {
+                    @Override
+                    protected Boolean doInBackground() {
+                        try {
+                            // Update DonHang trangThai to "huy"
+                            currentSelectedOrder.setTrangThai("huy");
+                            if (!donHangDAO.capNhat(currentSelectedOrder)) {
+                                return false;
+                            }
+
+                            // Update Ban trangThai to "trong" and clear maDonHang
+                            if (currentSelectedOrder.getMaBan() != null && currentSelectedOrder.getMaBan() > 0) {
+                                Ban ban = banDAO.layTheoId(currentSelectedOrder.getMaBan());
+                                if (ban != null) {
+                                    ban.setTrangThai("trong");
+                                    ban.setMaDonHang(null);
+                                    if (!banDAO.capNhat(ban)) {
+                                        return false;
+                                    }
+                                }
+                            }
+
+                            return true;
+                        } catch (Exception ex) {
+                            ex.printStackTrace();
+                            return false;
+                        }
+                    }
+
+                    @Override
+                    protected void done() {
+                        try {
+                            Boolean success = get();
+                            if (success) {
+                                JOptionPane.showMessageDialog(RefundPanel.this,
+                                        "Hoàn tiền thành công cho hóa đơn " + currentSelectedOrder.getMaDonHang() + "!",
+                                        "Thành công", JOptionPane.INFORMATION_MESSAGE);
+                                noteArea.setText("");
+                                detailModel.setRowCount(0);
+                                invoiceModel.setRowCount(0);
+                                searchField.setText("");
+                                currentSelectedOrder = null;
+                            } else {
+                                JOptionPane.showMessageDialog(RefundPanel.this,
+                                        "Lỗi khi cập nhật trạng thái hoàn tiền.",
+                                        "Lỗi", JOptionPane.ERROR_MESSAGE);
+                            }
+                        } catch (Exception ex) {
+                            ex.printStackTrace();
+                            JOptionPane.showMessageDialog(RefundPanel.this,
+                                    "Lỗi: " + ex.getMessage(),
+                                    "Lỗi", JOptionPane.ERROR_MESSAGE);
+                        }
+                    }
+                }.execute();
             }
         }
     }
@@ -938,6 +1003,8 @@ public class XuLi extends JPanel {
         private final JTextField orderIdField = new JTextField(10);
         private final JTextArea reasonArea = new JTextArea(3, 20);
         private final DonHangDAO donHangDAO = new DonHangDAO();
+        private final BanDAO banDAO = new BanDAO();
+        private DonHang currentSelectedOrder = null;
 
         public CancelPanel() {
             setLayout(new BorderLayout(12, 12));
@@ -954,60 +1021,130 @@ public class XuLi extends JPanel {
             gbc.gridx = 0; gbc.gridy = 0;
             form.add(new JLabel("Mã hóa đơn:"), gbc);
             gbc.gridx = 1;
-            form.add(orderIdField, gbc);
+            JPanel inputPanel = new JPanel(new BorderLayout(4, 4));
+            JButton searchBtn = new JButton("Tìm");
+            inputPanel.add(orderIdField, BorderLayout.CENTER);
+            inputPanel.add(searchBtn, BorderLayout.EAST);
+            form.add(inputPanel, gbc);
+            
             gbc.gridx = 0; gbc.gridy = 1;
             gbc.gridwidth = 2;
             reasonArea.setBorder(BorderFactory.createTitledBorder("Lý do hủy"));
             form.add(new JScrollPane(reasonArea), gbc);
 
             JButton cancelBtn = new JButton("Hủy đơn");
-            cancelBtn.addActionListener(e -> cancelOrder());
             gbc.gridy = 2;
+            gbc.gridwidth = 2;
             gbc.anchor = GridBagConstraints.EAST;
             form.add(cancelBtn, gbc);
 
             add(form, BorderLayout.CENTER);
+
+            // === Sự kiện ===
+            searchBtn.addActionListener(e -> searchOrder());
+            cancelBtn.addActionListener(e -> cancelOrder());
+        }
+
+        private void searchOrder() {
+            String text = orderIdField.getText().trim();
+            if (text.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Nhập mã hóa đơn để tìm kiếm.", "Thông báo", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            try {
+                int maDonHang = Integer.parseInt(text);
+                currentSelectedOrder = donHangDAO.layTheoId(maDonHang);
+                
+                if (currentSelectedOrder != null) {
+                    reasonArea.setText("");
+                    JOptionPane.showMessageDialog(this,
+                            "Tìm thấy hóa đơn " + maDonHang + "\nTrạng thái: " + currentSelectedOrder.getTrangThai(),
+                            "Kết quả tìm kiếm", JOptionPane.INFORMATION_MESSAGE);
+                } else {
+                    JOptionPane.showMessageDialog(this, "Không tìm thấy hóa đơn với mã: " + maDonHang, "Không tìm thấy", JOptionPane.INFORMATION_MESSAGE);
+                    currentSelectedOrder = null;
+                }
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(this, "Mã hóa đơn phải là số nguyên.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            }
         }
 
         private void cancelOrder() {
-            String text = orderIdField.getText().trim();
-            if (text.isEmpty()) {
-                JOptionPane.showMessageDialog(this, "Nhập mã hóa đơn.", "Thông báo", JOptionPane.WARNING_MESSAGE);
-                return;
-            }
-            int id;
-            try {
-                id = Integer.parseInt(text);
-            } catch (NumberFormatException ex) {
-                JOptionPane.showMessageDialog(this, "Mã hóa đơn không hợp lệ.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            if (currentSelectedOrder == null) {
+                JOptionPane.showMessageDialog(this, "Vui lòng tìm hóa đơn trước!", "Thông báo", JOptionPane.WARNING_MESSAGE);
                 return;
             }
 
-            DonHang order = donHangDAO.layTheoId(id);
-            if (order == null) {
-                JOptionPane.showMessageDialog(this, "Không tìm thấy hóa đơn.", "Lỗi", JOptionPane.ERROR_MESSAGE);
-                return;
-            }
-            if ("daHuy".equalsIgnoreCase(order.getTrangThai())) {
+            if ("daHuy".equalsIgnoreCase(currentSelectedOrder.getTrangThai())) {
                 JOptionPane.showMessageDialog(this, "Hóa đơn đã được hủy trước đó.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
                 return;
             }
 
-            int confirm = JOptionPane.showConfirmDialog(this,
-                    "Xác nhận hủy hóa đơn " + id + "?",
-                    "Xác nhận", JOptionPane.YES_NO_OPTION);
-            if (confirm != JOptionPane.YES_OPTION) {
-                return;
+            String reason = reasonArea.getText().trim();
+            if (reason.isEmpty()) {
+                int opt = JOptionPane.showConfirmDialog(this, "Bạn chưa nhập lý do hủy. Tiếp tục?", "Xác nhận", JOptionPane.YES_NO_OPTION);
+                if (opt != JOptionPane.YES_OPTION) return;
             }
 
-            order.setTrangThai("daHuy");
-            boolean ok = donHangDAO.capNhat(order);
-            if (ok) {
-                JOptionPane.showMessageDialog(this, "Đã hủy hóa đơn " + id + ".", "Thành công", JOptionPane.INFORMATION_MESSAGE);
-                orderIdField.setText("");
-                reasonArea.setText("");
-            } else {
-                JOptionPane.showMessageDialog(this, "Không thể hủy hóa đơn.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            int confirm = JOptionPane.showConfirmDialog(this,
+                    "Xác nhận hủy hóa đơn " + currentSelectedOrder.getMaDonHang() + "?",
+                    "Xác nhận hủy", JOptionPane.YES_NO_OPTION);
+
+            if (confirm == JOptionPane.YES_OPTION) {
+                new SwingWorker<Boolean, Void>() {
+                    @Override
+                    protected Boolean doInBackground() {
+                        try {
+                            // Update DonHang trangThai to "huy"
+                            currentSelectedOrder.setTrangThai("huy");
+                            if (!donHangDAO.capNhat(currentSelectedOrder)) {
+                                return false;
+                            }
+
+                            // Update Ban trangThai to "trong" and clear maDonHang
+                            if (currentSelectedOrder.getMaBan() != null && currentSelectedOrder.getMaBan() > 0) {
+                                Ban ban = banDAO.layTheoId(currentSelectedOrder.getMaBan());
+                                if (ban != null) {
+                                    ban.setTrangThai("trong");
+                                    ban.setMaDonHang(null);
+                                    if (!banDAO.capNhat(ban)) {
+                                        return false;
+                                    }
+                                }
+                            }
+
+                            return true;
+                        } catch (Exception ex) {
+                            ex.printStackTrace();
+                            return false;
+                        }
+                    }
+
+                    @Override
+                    protected void done() {
+                        try {
+                            Boolean success = get();
+                            if (success) {
+                                JOptionPane.showMessageDialog(CancelPanel.this,
+                                        "Đã hủy hóa đơn " + currentSelectedOrder.getMaDonHang() + ".",
+                                        "Thành công", JOptionPane.INFORMATION_MESSAGE);
+                                orderIdField.setText("");
+                                reasonArea.setText("");
+                                currentSelectedOrder = null;
+                            } else {
+                                JOptionPane.showMessageDialog(CancelPanel.this,
+                                        "Không thể hủy hóa đơn.",
+                                        "Lỗi", JOptionPane.ERROR_MESSAGE);
+                            }
+                        } catch (Exception ex) {
+                            ex.printStackTrace();
+                            JOptionPane.showMessageDialog(CancelPanel.this,
+                                    "Lỗi: " + ex.getMessage(),
+                                    "Lỗi", JOptionPane.ERROR_MESSAGE);
+                        }
+                    }
+                }.execute();
             }
         }
     }

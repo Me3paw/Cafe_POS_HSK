@@ -16,10 +16,10 @@ import java.util.function.Supplier;
  * SystemPanel now exposes password settings for the current user and, if the
  * logged-in account is an admin, advanced tabs for managing taxes and roles.
  */
-public class SystemPanel extends JPanel {
+public class HeThong extends JPanel {
     private final JTabbedPane tabs = new JTabbedPane();
 
-    public SystemPanel() {
+    public HeThong() {
         setLayout(new BorderLayout());
         tabs.addTab("Mật khẩu", buildPasswordTab());
         tabs.addTab("Thuế", buildAdminTab(
@@ -299,7 +299,7 @@ public class SystemPanel extends JPanel {
             @Override public boolean isCellEditable(int row, int column) { return false; }
         };
         private final JTable table = new JTable(model);
-        private final JComboBox<String> roleCombo = new JComboBox<>(new String[]{"admin", "quanly", "nhanvien"});
+        private final JComboBox<String> roleCombo = new JComboBox<>(new String[]{"quanly", "thuNgan", "phaChe"});
         private final JLabel selectedUserLabel = new JLabel("Chưa chọn");
         private final NguoiDungDAO dao = new NguoiDungDAO();
 

@@ -26,7 +26,7 @@ public class ManHinhChinh extends JFrame {
     public static final String OPERATION = "OPERATION";
     public static final String REPORT = "REPORT";
 
-    private SystemPanel systemPanel;
+    private HeThong systemPanel;
     private DanhMuc catalogPanel;
     private CapNhat updatePanel;
     private TimKiem searchPanel;
@@ -60,7 +60,7 @@ public class ManHinhChinh extends JFrame {
         contentLayout = new CardLayout();
         contentPanel = new JPanel(contentLayout);
 
-        systemPanel = new SystemPanel();
+        systemPanel = new HeThong();
         catalogPanel = new DanhMuc();
         // initialize panels with shared model
         updatePanel = new CapNhat(sharedTableModel);
