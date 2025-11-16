@@ -9,8 +9,6 @@ import dao.*;
 import entity.*;
 
 import java.awt.*;
-import java.io.File;
-import java.io.PrintWriter;
 import java.math.BigDecimal;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
@@ -29,11 +27,9 @@ import java.util.function.Supplier;
  */
 public class XuLi extends JPanel {
     private JTabbedPane tabs;
-    private Component owner;
     private PaymentPanel paymentPanel; // hold a reference so other inner panels can access table layout
 
-    public XuLi(Component owner, GiaoDienKhuVucBan.TableModel tableModel) {
-        this.owner = owner;
+    public XuLi(GiaoDienKhuVucBan.TableModel tableModel) {
         setLayout(new BorderLayout());
         tabs = new JTabbedPane();
         paymentPanel = new PaymentPanel(tableModel);
@@ -117,8 +113,10 @@ public class XuLi extends JPanel {
         private volatile Integer pendingCustomerId = null;
         private final DecimalFormat currencyFormat;
         private DonHang currentLoadedOrder = null;
-     // Prevent recursive or programmatic selection events
+        // Prevent recursive or programmatic selection events
         private boolean isProgrammaticSelection = false;
+        private SwingWorker<List<ChiTietDonHang>, Void> currentDetailsWorker;
+        private Integer currentDetailOrderId = null;
 
 
         public PaymentPanel(GiaoDienKhuVucBan.TableModel sharedModel) {
@@ -398,11 +396,14 @@ public class XuLi extends JPanel {
             totalField.setText(formatCurrency(order.getTongCuoi()));
             fillCustomerInfo(order.getMaKhachHang());
             // Clear products table first before loading new details to prevent duplicates
+            cancelCurrentDetailsLoader();
             productModel.setRowCount(0);
             loadOrderDetailsFromDatabase(order.getMaDonHang(), order.getTongCuoi());
         }
 
         private void clearOrderDisplay() {
+            cancelCurrentDetailsLoader();
+            currentDetailOrderId = null;
             productModel.setRowCount(0);
             pendingCustomerId = null;
             customerIdField.setText("");
@@ -514,8 +515,11 @@ public class XuLi extends JPanel {
         }
 
         private void loadOrderDetailsFromDatabase(int maDonHang, BigDecimal tongCuoiExpected) {
+            cancelCurrentDetailsLoader();
+            currentDetailOrderId = maDonHang;
             productModel.setRowCount(0);
-            new SwingWorker<List<ChiTietDonHang>, Void>() {
+            final int expectedOrderId = maDonHang;
+            currentDetailsWorker = new SwingWorker<List<ChiTietDonHang>, Void>() {
                 @Override
                 protected List<ChiTietDonHang> doInBackground() {
                     return chiTietDonHangDAO.layTheoDonHang(maDonHang);
@@ -524,6 +528,9 @@ public class XuLi extends JPanel {
                 @Override
                 protected void done() {
                     try {
+                        if (isCancelled() || !isCurrentDetailRequest(expectedOrderId)) {
+                            return;
+                        }
                         List<ChiTietDonHang> details = get();
                         if (details != null) {
                             for (ChiTietDonHang ct : details) {
@@ -542,7 +549,22 @@ public class XuLi extends JPanel {
                         JOptionPane.showMessageDialog(PaymentPanel.this, "Không tải được chi tiết hóa đơn.", "Lỗi", JOptionPane.ERROR_MESSAGE);
                     }
                 }
-            }.execute();
+            };
+            currentDetailsWorker.execute();
+        }
+
+        private boolean isCurrentDetailRequest(int expectedOrderId) {
+            if (currentDetailOrderId == null || currentLoadedOrder == null) {
+                return false;
+            }
+            return currentDetailOrderId == expectedOrderId
+                    && currentLoadedOrder.getMaDonHang() == expectedOrderId;
+        }
+
+        private void cancelCurrentDetailsLoader() {
+            if (currentDetailsWorker != null && !currentDetailsWorker.isDone()) {
+                currentDetailsWorker.cancel(true);
+            }
         }
 
         private void loadOrderFromTable(CafeTable t) {
@@ -641,28 +663,6 @@ public class XuLi extends JPanel {
                     .replaceAll("\\p{InCombiningDiacriticalMarks}+", "")
                     .toUpperCase(Locale.ROOT);
             return normalized.contains("PAID") || normalized.contains("THANHTOAN") || normalized.contains("HOANTAT");
-        }
-
-        private void updateTotalFromProducts() {
-            BigDecimal sum = BigDecimal.ZERO;
-            for (int i = 0; i < productModel.getRowCount(); i++) {
-                Object v = productModel.getValueAt(i, 4);
-                if (v instanceof BigDecimal) {
-                    sum = sum.add((BigDecimal) v);
-                } else if (v instanceof Number) {
-                    sum = sum.add(BigDecimal.valueOf(((Number) v).doubleValue()));
-                } else if (v != null) {
-                    try {
-                        String normalized = v.toString().replaceAll("[^0-9.-]", "");
-                        if (!normalized.isEmpty()) {
-                            sum = sum.add(new BigDecimal(normalized));
-                        }
-                    } catch (Exception ignored) {}
-                }
-            }
-            if (sum.compareTo(BigDecimal.ZERO) > 0) {
-                totalField.setText(formatCurrency(sum));
-            }
         }
 
         private String formatCurrency(BigDecimal value) {

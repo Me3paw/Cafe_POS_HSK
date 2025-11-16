@@ -65,7 +65,7 @@ public class ManHinhChinh extends JFrame {
         // initialize panels with shared model
         updatePanel = new CapNhat(sharedTableModel);
         searchPanel = new TimKiem(this);
-        operationPanel = new XuLi(this, sharedTableModel);
+        operationPanel = new XuLi(sharedTableModel);
         reportPanel = new BaoBieu();
 
         contentPanel.add(systemPanel, SYSTEM);
