@@ -210,6 +210,11 @@ public class CapNhat extends JPanel {
                     return;
                 }
 
+                if (tonKho.getSoLuong().compareTo(BigDecimal.valueOf(qty)) < 0) {
+                    JOptionPane.showMessageDialog(this, "Vượt quá số lượng hàng còn.", "Thông báo", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+
                 // Calculate line total
                 long lineTotal = qty * mon.getGiaBan().longValue();
 
