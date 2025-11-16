@@ -6,7 +6,7 @@ import java.awt.*;
 
 /**
  * SearchPanel provides tabs for invoice, customer, and employee search.
- * Employee search requires system password to access.
+ * Employee search is restricted to admin sessions.
  */
 public class TimKiem extends JPanel {
     private JTabbedPane tabs;
@@ -18,29 +18,40 @@ public class TimKiem extends JPanel {
         tabs = new JTabbedPane();
         tabs.addTab("Tìm hóa đơn", new InvoiceSearchPanel());
         tabs.addTab("Tìm khách hàng", new CustomerSearchPanel());
-        tabs.addTab("Tìm nhân viên", buildEmployeeTab()); // will be protected
+        tabs.addTab("Tìm nhân viên", buildEmployeeTab()); // admin-only
         add(tabs, BorderLayout.CENTER);
     }
 
     private Component buildEmployeeTab() {
+        if (SessionContext.isAdmin()) {
+            return new EmployeeSearchPanel();
+        }
         JPanel locked = new JPanel(new BorderLayout());
-        JLabel lbl = new JLabel("<html>Chức năng tìm nhân viên cần xác thực mật khẩu hệ thống.<br>Nhấn nút để xác thực.</html>");
+        JLabel lbl = new JLabel("<html>Chức năng tìm nhân viên chỉ dành cho tài khoản quản trị.<br>Đăng nhập với quyền admin để tiếp tục.</html>");
         lbl.setBorder(BorderFactory.createEmptyBorder(10,10,10,10));
-        JButton btn = new JButton("Xác thực mật khẩu để mở");
-        btn.addActionListener(e -> {
-            boolean ok = PasswordDialog.authenticate(SwingUtilities.getWindowAncestor(this));
-            if (ok) {
-                // replace locked panel with real employee panel
-                int idx = tabs.indexOfComponent(locked);
-                if (idx >= 0) {
-                    tabs.setComponentAt(idx, new EmployeeSearchPanel());
-                    tabs.setTitleAt(idx, "Tìm nhân viên");
-                }
-            }
-        });
+        JButton btn = new JButton("Đăng nhập admin");
+        btn.addActionListener(e -> promptForAdmin(locked));
         locked.add(lbl, BorderLayout.CENTER);
         locked.add(btn, BorderLayout.SOUTH);
         return locked;
+    }
+
+    private void promptForAdmin(Component lockedComponent) {
+        DangNhapDialog dialog = new DangNhapDialog(SwingUtilities.getWindowAncestor(this));
+        entity.NguoiDung user = dialog.showDialog();
+        if (user == null) {
+            return;
+        }
+        SessionContext.setCurrentUser(user);
+        if (!SessionContext.isAdmin()) {
+            JOptionPane.showMessageDialog(this, "Tài khoản hiện tại không có quyền admin.", "Từ chối", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        int idx = tabs.indexOfComponent(lockedComponent);
+        if (idx >= 0) {
+            tabs.setComponentAt(idx, new EmployeeSearchPanel());
+            tabs.setTitleAt(idx, "Tìm nhân viên");
+        }
     }
 
     static class InvoiceSearchPanel extends JPanel {

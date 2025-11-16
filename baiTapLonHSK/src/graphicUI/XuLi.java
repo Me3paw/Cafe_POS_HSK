@@ -20,10 +20,12 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Supplier;
 
 /**
  * OperationPanel groups payment, printing, refunds, transfer/cancel operations.
- * Refund and some actions require password authentication.
+ * Refunds and cancellations now rely on the logged-in account's role instead of
+ * prompting for the legacy system password dialog.
  */
 public class XuLi extends JPanel {
     private JTabbedPane tabs;
@@ -36,23 +38,48 @@ public class XuLi extends JPanel {
         tabs = new JTabbedPane();
         paymentPanel = new PaymentPanel(tableModel);
         tabs.addTab("Thanh toán", paymentPanel);
-        tabs.addTab("Hoàn tiền", buildRefundTab()); // protected
+        tabs.addTab("Hoàn tiền", buildRefundTab());
+        tabs.addTab("Hủy đơn", buildCancelTab());
         add(tabs, BorderLayout.CENTER);
     }
 
     private Component buildRefundTab() {
+        if (SessionContext.isAdmin()) {
+            return new RefundPanel();
+        }
+        return buildLockedAdminPanel(
+                "<html>Hoàn tiền chỉ khả dụng cho tài khoản quản trị.<br>Đăng nhập admin để tiếp tục.</html>",
+                RefundPanel::new);
+    }
+
+    private Component buildCancelTab() {
+        if (SessionContext.isAdmin()) {
+            return new CancelPanel();
+        }
+        return buildLockedAdminPanel(
+                "<html>Hủy đơn là chức năng nâng cao dành cho admin.</html>",
+                CancelPanel::new);
+    }
+
+    private Component buildLockedAdminPanel(String message, Supplier<Component> supplier) {
         JPanel locked = new JPanel(new BorderLayout());
-        JLabel lbl = new JLabel("<html>Hoàn tiền là chức năng nâng cao và cần xác thực mật khẩu hệ thống.</html>");
+        JLabel lbl = new JLabel(message);
         lbl.setBorder(BorderFactory.createEmptyBorder(10,10,10,10));
-        JButton btn = new JButton("Xác thực để mở chức năng hoàn tiền");
+        JButton btn = new JButton("Đăng nhập admin");
         btn.addActionListener(e -> {
-            boolean ok = PasswordDialog.authenticate(SwingUtilities.getWindowAncestor(this));
-            if (ok) {
-                int idx = tabs.indexOfComponent(locked);
-                if (idx >= 0) {
-                    tabs.setComponentAt(idx, new RefundPanel());
-                    tabs.setTitleAt(idx, "Hoàn tiền");
-                }
+            DangNhapDialog dialog = new DangNhapDialog(SwingUtilities.getWindowAncestor(this));
+            entity.NguoiDung user = dialog.showDialog();
+            if (user == null) {
+                return;
+            }
+            SessionContext.setCurrentUser(user);
+            if (!SessionContext.isAdmin()) {
+                JOptionPane.showMessageDialog(this, "Tài khoản không có quyền admin.", "Từ chối", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            int idx = tabs.indexOfComponent(locked);
+            if (idx >= 0) {
+                tabs.setComponentAt(idx, supplier.get());
             }
         });
         locked.add(lbl, BorderLayout.CENTER);
@@ -903,6 +930,84 @@ public class XuLi extends JPanel {
                         "Thành công", JOptionPane.INFORMATION_MESSAGE);
                 noteArea.setText("");
                 detailModel.setRowCount(0);
+            }
+        }
+    }
+
+    static class CancelPanel extends JPanel {
+        private final JTextField orderIdField = new JTextField(10);
+        private final JTextArea reasonArea = new JTextArea(3, 20);
+        private final DonHangDAO donHangDAO = new DonHangDAO();
+
+        public CancelPanel() {
+            setLayout(new BorderLayout(12, 12));
+            setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
+
+            JLabel title = new JLabel("Hủy đơn hàng", SwingConstants.CENTER);
+            title.setFont(new Font("Segoe UI", Font.BOLD, 18));
+            add(title, BorderLayout.NORTH);
+
+            JPanel form = new JPanel(new GridBagLayout());
+            GridBagConstraints gbc = new GridBagConstraints();
+            gbc.insets = new Insets(6,6,6,6);
+            gbc.anchor = GridBagConstraints.WEST;
+            gbc.gridx = 0; gbc.gridy = 0;
+            form.add(new JLabel("Mã hóa đơn:"), gbc);
+            gbc.gridx = 1;
+            form.add(orderIdField, gbc);
+            gbc.gridx = 0; gbc.gridy = 1;
+            gbc.gridwidth = 2;
+            reasonArea.setBorder(BorderFactory.createTitledBorder("Lý do hủy"));
+            form.add(new JScrollPane(reasonArea), gbc);
+
+            JButton cancelBtn = new JButton("Hủy đơn");
+            cancelBtn.addActionListener(e -> cancelOrder());
+            gbc.gridy = 2;
+            gbc.anchor = GridBagConstraints.EAST;
+            form.add(cancelBtn, gbc);
+
+            add(form, BorderLayout.CENTER);
+        }
+
+        private void cancelOrder() {
+            String text = orderIdField.getText().trim();
+            if (text.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Nhập mã hóa đơn.", "Thông báo", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            int id;
+            try {
+                id = Integer.parseInt(text);
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(this, "Mã hóa đơn không hợp lệ.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            DonHang order = donHangDAO.layTheoId(id);
+            if (order == null) {
+                JOptionPane.showMessageDialog(this, "Không tìm thấy hóa đơn.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            if ("daHuy".equalsIgnoreCase(order.getTrangThai())) {
+                JOptionPane.showMessageDialog(this, "Hóa đơn đã được hủy trước đó.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+
+            int confirm = JOptionPane.showConfirmDialog(this,
+                    "Xác nhận hủy hóa đơn " + id + "?",
+                    "Xác nhận", JOptionPane.YES_NO_OPTION);
+            if (confirm != JOptionPane.YES_OPTION) {
+                return;
+            }
+
+            order.setTrangThai("daHuy");
+            boolean ok = donHangDAO.capNhat(order);
+            if (ok) {
+                JOptionPane.showMessageDialog(this, "Đã hủy hóa đơn " + id + ".", "Thành công", JOptionPane.INFORMATION_MESSAGE);
+                orderIdField.setText("");
+                reasonArea.setText("");
+            } else {
+                JOptionPane.showMessageDialog(this, "Không thể hủy hóa đơn.", "Lỗi", JOptionPane.ERROR_MESSAGE);
             }
         }
     }
