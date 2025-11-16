@@ -117,8 +117,10 @@ public class XuLi extends JPanel {
         private volatile Integer pendingCustomerId = null;
         private final DecimalFormat currencyFormat;
         private DonHang currentLoadedOrder = null;
-     // Prevent recursive or programmatic selection events
+        // Prevent recursive or programmatic selection events
         private boolean isProgrammaticSelection = false;
+        private SwingWorker<List<ChiTietDonHang>, Void> currentDetailsWorker;
+        private Integer currentDetailOrderId = null;
 
 
         public PaymentPanel(GiaoDienKhuVucBan.TableModel sharedModel) {
@@ -398,11 +400,14 @@ public class XuLi extends JPanel {
             totalField.setText(formatCurrency(order.getTongCuoi()));
             fillCustomerInfo(order.getMaKhachHang());
             // Clear products table first before loading new details to prevent duplicates
+            cancelCurrentDetailsLoader();
             productModel.setRowCount(0);
             loadOrderDetailsFromDatabase(order.getMaDonHang(), order.getTongCuoi());
         }
 
         private void clearOrderDisplay() {
+            cancelCurrentDetailsLoader();
+            currentDetailOrderId = null;
             productModel.setRowCount(0);
             pendingCustomerId = null;
             customerIdField.setText("");
@@ -514,8 +519,11 @@ public class XuLi extends JPanel {
         }
 
         private void loadOrderDetailsFromDatabase(int maDonHang, BigDecimal tongCuoiExpected) {
+            cancelCurrentDetailsLoader();
+            currentDetailOrderId = maDonHang;
             productModel.setRowCount(0);
-            new SwingWorker<List<ChiTietDonHang>, Void>() {
+            final int expectedOrderId = maDonHang;
+            currentDetailsWorker = new SwingWorker<List<ChiTietDonHang>, Void>() {
                 @Override
                 protected List<ChiTietDonHang> doInBackground() {
                     return chiTietDonHangDAO.layTheoDonHang(maDonHang);
@@ -524,6 +532,9 @@ public class XuLi extends JPanel {
                 @Override
                 protected void done() {
                     try {
+                        if (isCancelled() || !isCurrentDetailRequest(expectedOrderId)) {
+                            return;
+                        }
                         List<ChiTietDonHang> details = get();
                         if (details != null) {
                             for (ChiTietDonHang ct : details) {
@@ -542,7 +553,22 @@ public class XuLi extends JPanel {
                         JOptionPane.showMessageDialog(PaymentPanel.this, "Không tải được chi tiết hóa đơn.", "Lỗi", JOptionPane.ERROR_MESSAGE);
                     }
                 }
-            }.execute();
+            };
+            currentDetailsWorker.execute();
+        }
+
+        private boolean isCurrentDetailRequest(int expectedOrderId) {
+            if (currentDetailOrderId == null || currentLoadedOrder == null) {
+                return false;
+            }
+            return currentDetailOrderId == expectedOrderId
+                    && currentLoadedOrder.getMaDonHang() == expectedOrderId;
+        }
+
+        private void cancelCurrentDetailsLoader() {
+            if (currentDetailsWorker != null && !currentDetailsWorker.isDone()) {
+                currentDetailsWorker.cancel(true);
+            }
         }
 
         private void loadOrderFromTable(CafeTable t) {
