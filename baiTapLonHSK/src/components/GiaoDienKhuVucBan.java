@@ -27,7 +27,7 @@ public class GiaoDienKhuVucBan extends JPanel {
         THANHTOAN_MODE // new mode for selecting a table for checkout without auto-occupying
     }
 
-    public static final int TAKEAWAY_TABLE_ID = 15;
+    public static final int TAKEAWAY_TABLE_ID = 0;
 
     private Mode mode;
 

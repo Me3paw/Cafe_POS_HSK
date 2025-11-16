@@ -128,7 +128,8 @@ public class BanDAO {
         t.setMaBan(rs.getInt("maBan"));
         int maDonHang = rs.getInt("maDonHang");
         t.setMaDonHang(rs.wasNull() ? null : maDonHang);
-        t.setTrangThai(fromDbStatus(rs.getString("trangThai")));
+        // Keep status in English (database ENUM format), don't convert to Vietnamese here
+        t.setTrangThai(rs.getString("trangThai"));
         int soNguoi = rs.getInt("soNguoi");
         t.setSoNguoi(rs.wasNull() ? null : soNguoi);
         t.setCapNhatCuoi(rs.getTimestamp("capNhatCuoi"));
